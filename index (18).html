@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MeineAbrechnungen - DAV Alpinkader NRW</title>
+    <link rel="icon" type="image/jpeg" href="/favicon.jpg" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      @media print {
+        @page {
+          size: A4;
+          margin: 0;
+        }
+        body * {
+          visibility: hidden;
+        }
+        #print-area, #print-area * {
+          visibility: visible;
+        }
+        #print-area {
+          position: absolute;
+          left: 0;
+          top: 0;
+          width: 210mm; /* A4 Width */
+          height: 297mm; /* A4 Height */
+          margin: 0;
+          padding: 0;
+          background: white;
+          overflow: hidden; /* Prevent spillover */
+        }
+        .no-print {
+          display: none !important;
+        }
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@^19.2.4",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
+    "react/": "https://esm.sh/react@^19.2.4/",
+    "lucide-react": "https://esm.sh/lucide-react@^0.563.0",
+    "vite": "https://esm.sh/vite@^7.3.1",
+    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.4",
+    "read-excel-file": "https://esm.sh/read-excel-file@^6.0.3",
+    "crypto": "https://esm.sh/crypto@^1.0.1",
+    "cors": "https://esm.sh/cors@^2.8.6",
+    "url": "https://esm.sh/url@^0.11.4",
+    "express": "https://esm.sh/express@^5.2.1",
+    "better-sqlite3": "https://esm.sh/better-sqlite3@^12.6.2",
+    "fs": "https://esm.sh/fs@^0.0.1-security",
+    "path": "https://esm.sh/path@^0.12.7",
+    "zod": "https://esm.sh/zod@^3.22.4",
+    "@react-pdf/renderer": "https://esm.sh/@react-pdf/renderer@^4.3.2",
+    "nodemailer": "https://esm.sh/nodemailer@^8.0.1"
+  }
+}
+</script>
+</head>
+  <body class="bg-slate-50 text-slate-900 antialiased">
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>

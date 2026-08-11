@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  app:
+    # Build-Context entfernt, wir ziehen nur noch das fertige Image
+    image: ghcr.io/davidcolling13/meineabrechnung:latest
+    container_name: MeineAbrechnung
+    restart: unless-stopped
+    ports:
+      - "8081:3000"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+    stop_grace_period: 30s

@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MeineAbrechnungen - DAV Alpinkader NRW</title>
+    <link rel="icon" type="image/jpeg" href="/favicon.jpg" />
+    <style>
+      @media print {
+        @page {
+          size: A4;
+          margin: 0;
+        }
+        body * {
+          visibility: hidden;
+        }
+        #print-area, #print-area * {
+          visibility: visible;
+        }
+        #print-area {
+          position: absolute;
+          left: 0;
+          top: 0;
+          width: 210mm; /* A4 Width */
+          height: 297mm; /* A4 Height */
+          margin: 0;
+          padding: 0;
+          background: white;
+          overflow: hidden; /* Prevent spillover */
+        }
+        .no-print {
+          display: none !important;
+        }
+      }
+    </style>
+  </head>
+  <body class="bg-slate-50 text-slate-900 antialiased">
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>

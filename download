@@ -1,0 +1,36 @@
+# Dependencies
+node_modules
+.pnp
+.pnp.js
+
+# Testing
+coverage
+
+# Local Data (SQLite via Volume)
+data
+
+# Environment variables
+.env
+.env.local
+.env.*
+
+# Git
+.git
+.gitignore
+.github
+
+# Docker meta files
+docker-compose.yml
+backup.txt
+
+# Docs
+README.md
+
+# System
+.DS_Store
+*.pem
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
