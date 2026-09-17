@@ -9,8 +9,8 @@ RUN apk add --no-cache python3 make g++
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies (use npm install instead of ci because package-lock might be missing)
-RUN npm install
+# Install dependencies (remove package-lock.json to avoid npm v10 multi-arch lock bugs with rollup binaries)
+RUN rm -f package-lock.json && npm install
 
 # Copy source code
 COPY . .
@@ -30,7 +30,7 @@ RUN apk add --no-cache python3 make g++
 COPY --from=builder /app/package*.json ./
 
 # Install production dependencies only (rebuilds native modules)
-RUN npm install --omit=dev
+RUN rm -f package-lock.json && npm install --omit=dev
 
 # Copy built assets and server
 COPY --from=builder /app/dist ./dist
