@@ -6,6 +6,7 @@ import { CardSkeleton } from '../components/Skeleton';
 import { PDFDownloadLink, pdf } from '@react-pdf/renderer';
 import { CertificateDocument } from '../components/pdf/CertificateDocument';
 import { useToast } from '../components/Toast';
+import { generateUUID } from '../utils/formatting';
 
 interface CertificatesProps {
   contacts: Contact[];
@@ -58,7 +59,7 @@ export const Certificates: React.FC<CertificatesProps> = ({ contacts }) => {
   const handleSaveToHistory = async (contact: Contact, method: 'download' | 'email', invNumber: string) => {
     try {
         await db.saveInvoice({
-            id: typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).substr(2),
+            id: generateUUID(),
             invoiceNumber: invNumber,
             recipientName: `${contact.firstName} ${contact.lastName}`,
             date: new Date().toISOString().split('T')[0], 

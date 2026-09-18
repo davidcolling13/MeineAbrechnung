@@ -1,10 +1,11 @@
-import { Contact, AppSettings, InvoiceRecord } from '../types';
+import { Contact, AppSettings, InvoiceRecord, SystemLogEntry, LogsResponse, LogLevel } from '../types';
 import { DEFAULT_INVOICE_TEXT, DEFAULT_CERTIFICATE_TEXT, FOOTER_INFO, SENDER_LINE, BULK_ORDER_PAYMENT_TEXT } from '../constants';
 
 let isOffline = false;
 const CONTACTS_KEY = 'meineabrechnung_contacts';
 const SETTINGS_KEY = 'meineabrechnung_settings';
 const INVOICES_KEY = 'meineabrechnung_invoices';
+const LOGS_KEY = 'meineabrechnung_logs';
 
 // --- LocalStorage Helpers ---
 const getLocal = <T>(key: string): T | null => {
@@ -77,7 +78,14 @@ export const db = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(contact)
     });
-    if (!response.ok) throw new Error('Fehler beim Speichern');
+    if (!response.ok) {
+      let errorMsg = 'Fehler beim Speichern';
+      try {
+        const errorData = await response.json();
+        if (errorData?.error) errorMsg = errorData.error;
+      } catch (_) {}
+      throw new Error(errorMsg);
+    }
     return await response.json();
   },
 
@@ -96,7 +104,14 @@ export const db = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(contact)
     });
-    if (!response.ok) throw new Error('Fehler beim Update');
+    if (!response.ok) {
+      let errorMsg = 'Fehler beim Update';
+      try {
+        const errorData = await response.json();
+        if (errorData?.error) errorMsg = errorData.error;
+      } catch (_) {}
+      throw new Error(errorMsg);
+    }
     return contact;
   },
 
@@ -198,5 +213,85 @@ export const db = {
           method: 'DELETE'
       });
       if (!response.ok) throw new Error("Fehler beim Löschen der Rechnung");
+  },
+
+  // --- SYSTEM LOGS ---
+  async getLogs(filters?: { level?: string; source?: string; search?: string; limit?: number }): Promise<LogsResponse> {
+      if (isOffline) {
+          let logs = getLocal<SystemLogEntry[]>(LOGS_KEY) || [];
+          if (filters?.level && filters.level !== 'ALL') {
+              logs = logs.filter(l => l.level === filters.level);
+          }
+          if (filters?.source && filters.source !== 'ALL') {
+              logs = logs.filter(l => l.source === filters.source);
+          }
+          if (filters?.search) {
+              const q = filters.search.toLowerCase();
+              logs = logs.filter(l => l.message.toLowerCase().includes(q) || (l.details && l.details.toLowerCase().includes(q)));
+          }
+          const limit = filters?.limit || 200;
+          return {
+              logs: logs.slice(0, limit),
+              totalCount: logs.length,
+              maxLimit: 500
+          };
+      }
+
+      const params = new URLSearchParams();
+      if (filters?.level && filters.level !== 'ALL') params.set('level', filters.level);
+      if (filters?.source && filters.source !== 'ALL') params.set('source', filters.source);
+      if (filters?.search) params.set('search', filters.search);
+      if (filters?.limit) params.set('limit', filters.limit.toString());
+
+      const url = `/api/logs${params.toString() ? '?' + params.toString() : ''}`;
+      const response = await fetch(url);
+      if (!response.ok) {
+          throw new Error("Fehler beim Laden des Systemprotokolls");
+      }
+      return await response.json();
+  },
+
+  async clearLogs(): Promise<void> {
+      if (isOffline) {
+          saveLocal(LOGS_KEY, []);
+          return;
+      }
+      const response = await fetch('/api/logs', { method: 'DELETE' });
+      if (!response.ok) {
+          throw new Error("Fehler beim Leeren des Systemprotokolls");
+      }
+  },
+
+  async logClientEvent(level: LogLevel, message: string, details?: any): Promise<void> {
+      try {
+          if (isOffline) {
+              const logs = getLocal<SystemLogEntry[]>(LOGS_KEY) || [];
+              const newEntry: SystemLogEntry = {
+                  id: Date.now(),
+                  timestamp: new Date().toISOString(),
+                  level,
+                  source: 'Client (Offline)',
+                  message,
+                  details: details ? (typeof details === 'object' ? JSON.stringify(details) : String(details)) : null
+              };
+              logs.unshift(newEntry);
+              if (logs.length > 100) logs.length = 100;
+              saveLocal(LOGS_KEY, logs);
+              return;
+          }
+
+          await fetch('/api/logs', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                  level,
+                  source: 'Client',
+                  message,
+                  details
+              })
+          });
+      } catch (err) {
+          console.warn("Client konnte Log nicht an Server senden:", err);
+      }
   }
 };

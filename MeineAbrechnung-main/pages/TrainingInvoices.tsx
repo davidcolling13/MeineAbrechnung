@@ -5,7 +5,7 @@ import { useToast } from '../components/Toast';
 import { Printer, Euro, Calendar, Mail, Loader2, Download } from 'lucide-react';
 import { CardSkeleton } from '../components/Skeleton';
 import { TrainingInvoicePrint } from '../components/print/TrainingInvoicePrint';
-import { roundCurrency } from '../utils/formatting';
+import { roundCurrency, generateUUID } from '../utils/formatting';
 import { PDFDownloadLink, pdf } from '@react-pdf/renderer';
 import { TrainingInvoiceDocument } from '../components/pdf/TrainingInvoiceDocument';
 
@@ -57,7 +57,7 @@ export const TrainingInvoices: React.FC<TrainingInvoicesProps> = ({ contacts }) 
   const handleSaveToHistory = async (contact: Contact, method: 'email' | 'download', invNumber: string) => {
     try {
         await db.saveInvoice({
-            id: typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).substr(2),
+            id: generateUUID(),
             invoiceNumber: invNumber,
             recipientName: `${contact.firstName} ${contact.lastName}`,
             date: new Date().toISOString().split('T')[0],

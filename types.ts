@@ -54,3 +54,20 @@ export interface InvoiceRecord {
 
 export type SortField = 'lastName' | 'city' | 'type';
 export type SortDirection = 'asc' | 'desc';
+
+export type LogLevel = 'INFO' | 'WARN' | 'ERROR';
+
+export interface SystemLogEntry {
+  id: number;
+  timestamp: string;
+  level: LogLevel;
+  source: string;
+  message: string;
+  details?: string | null;
+}
+
+export interface LogsResponse {
+  logs: SystemLogEntry[];
+  totalCount: number;
+  maxLimit: number;
+}

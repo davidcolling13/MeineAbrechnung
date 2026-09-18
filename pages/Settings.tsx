@@ -2,10 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { AppSettings } from '../types';
 import { db } from '../services/db';
 import { useToast } from '../components/Toast';
-import { Save, RefreshCw, Server, ShieldCheck, Mail } from 'lucide-react';
+import { Save, RefreshCw, Server, ShieldCheck, Mail, Sliders, Activity } from 'lucide-react';
 import { Skeleton } from '../components/Skeleton';
+import { SystemLogsView } from '../components/SystemLogsView';
+
+type SettingsTab = 'general' | 'logs';
 
 export const Settings: React.FC = () => {
+    const [activeTab, setActiveTab] = useState<SettingsTab>('general');
     const [settings, setSettings] = useState<AppSettings | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const { addToast } = useToast();
@@ -42,14 +46,48 @@ export const Settings: React.FC = () => {
 
     return (
         <div className="max-w-4xl mx-auto space-y-6 pb-10">
-            <div className="flex justify-between items-center">
-                <h1 className="text-2xl font-bold text-slate-900">Einstellungen & Vorlagen</h1>
-                <div className="flex gap-3">
-                    <button onClick={loadSettings} className="p-2 text-slate-500 hover:bg-slate-100 rounded-lg"><RefreshCw className="w-5 h-5"/></button>
-                    <button onClick={handleSave} className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 shadow-sm"><Save className="w-4 h-4"/> Speichern</button>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                    <h1 className="text-2xl font-bold text-slate-900">Einstellungen</h1>
+                    <p className="text-sm text-slate-500 mt-1">Konfiguration, E-Mail-Server, Vorlagen und Systemprotokoll</p>
                 </div>
+                {activeTab === 'general' && (
+                    <div className="flex gap-3">
+                        <button onClick={loadSettings} title="Einstellungen neu laden" className="p-2 text-slate-500 hover:bg-slate-100 rounded-lg"><RefreshCw className="w-5 h-5"/></button>
+                        <button onClick={handleSave} className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 shadow-sm font-medium text-sm"><Save className="w-4 h-4"/> Speichern</button>
+                    </div>
+                )}
             </div>
 
+            {/* Navigation Tabs */}
+            <div className="flex border-b border-slate-200">
+                <button
+                    onClick={() => setActiveTab('general')}
+                    className={`flex items-center gap-2 py-3 px-4 text-sm font-medium border-b-2 transition-colors ${
+                        activeTab === 'general'
+                            ? 'border-blue-600 text-blue-600'
+                            : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+                    }`}
+                >
+                    <Sliders className="w-4 h-4" />
+                    Allgemein & Vorlagen
+                </button>
+                <button
+                    onClick={() => setActiveTab('logs')}
+                    className={`flex items-center gap-2 py-3 px-4 text-sm font-medium border-b-2 transition-colors ${
+                        activeTab === 'logs'
+                            ? 'border-blue-600 text-blue-600'
+                            : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+                    }`}
+                >
+                    <Activity className="w-4 h-4" />
+                    Systemprotokoll (Logging)
+                </button>
+            </div>
+
+            {activeTab === 'logs' ? (
+                <SystemLogsView />
+            ) : (
             <div className="grid gap-6">
                 
                 {/* SMTP Settings */}
@@ -198,6 +236,7 @@ export const Settings: React.FC = () => {
                     </div>
                 </div>
             </div>
+            )}
         </div>
     );
 };

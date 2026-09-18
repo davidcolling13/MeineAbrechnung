@@ -5,6 +5,8 @@ import { useToast } from '../components/Toast';
 import { ConfirmationModal } from '../components/ConfirmationModal';
 import { TableRowSkeleton } from '../components/Skeleton';
 import { ContactSchema } from '../schemas';
+import { generateUUID } from '../utils/formatting';
+import { db } from '../services/db';
 
 // Wir nutzen ein lokales Objekt für die Klassen, um das JSX sauber zu halten (ähnlich wie CSS Modules),
 // aber nutzen Tailwind-Klassen, da CSS-Dateien in dieser Umgebung nicht importiert werden können.
@@ -131,27 +133,42 @@ export const Contacts: React.FC<ContactsProps> = ({ contacts, onAdd, onUpdate, o
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    const sanitizedData = {
+        ...formData,
+        firstName: formData.firstName.trim(),
+        lastName: formData.lastName.trim(),
+        address: formData.address.trim(),
+        zip: formData.zip.trim(),
+        city: formData.city.trim(),
+        email: formData.email.trim()
+    };
+
     // Client-Side Validation with Zod
-    const validation = ContactSchema.safeParse(formData);
+    const validation = ContactSchema.safeParse(sanitizedData);
     if (!validation.success) {
         const errorMsg = validation.error.issues[0].message;
         addToast(errorMsg, 'error');
+        db.logClientEvent('WARN', `Validierungsfehler im Kontaktformular: ${errorMsg}`, sanitizedData);
         return;
     }
 
     try {
         if (editingContact) {
-            await onUpdate({ ...formData, id: editingContact.id });
+            await onUpdate({ ...sanitizedData, id: editingContact.id });
             addToast('Kontakt erfolgreich aktualisiert', 'success');
         } else {
-            // Standardisierte UUID-Generierung für bessere Datenintegrität
-            const newId = crypto.randomUUID();
-            await onAdd({ ...formData, id: newId });
+            // Standardisierte UUID-Generierung mit sicherem Fallback für LAN/HTTP
+            const newId = generateUUID();
+            await onAdd({ ...sanitizedData, id: newId });
             addToast('Kontakt erfolgreich angelegt', 'success');
         }
         setIsModalOpen(false);
-    } catch (err) {
-        addToast('Fehler beim Speichern des Kontakts', 'error');
+    } catch (err: any) {
+        addToast(err?.message || 'Fehler beim Speichern des Kontakts', 'error');
+        db.logClientEvent('ERROR', `Fehler beim Speichern von Kontakt (${sanitizedData.firstName} ${sanitizedData.lastName}): ${err?.message}`, {
+            formData: sanitizedData,
+            error: err?.stack || err?.message
+        });
         console.error(err);
     }
   };
