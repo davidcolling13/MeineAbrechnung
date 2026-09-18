@@ -1,5 +1,6 @@
 {
   "name": "MeineAbrechnungen",
   "description": "Eine modulare Webanwendung für den DAV Alpinkader NRW zur Verwaltung von Stammdaten, Sammelbestellungen und Erstellung von Lehrgangsbescheinigungen sowie Rechnungen.",
-  "requestFramePermissions": []
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

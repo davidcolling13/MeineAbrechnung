@@ -3,8 +3,14 @@ import { Document, Page, Text, View, Image } from '@react-pdf/renderer';
 import { Contact, AppSettings } from '../../types';
 import { pdfStyles } from './SharedStyles';
 
+export interface ContactWithInvoice {
+  contact: Contact;
+  invoiceNumber: string;
+}
+
 interface CertificateDocumentProps {
-  contacts: Contact[];
+  contactsWithInvoices?: ContactWithInvoice[];
+  contacts?: Contact[];
   settings: AppSettings;
   formData: {
     title: string;
@@ -15,8 +21,18 @@ interface CertificateDocumentProps {
   };
 }
 
-export const CertificateDocument: React.FC<CertificateDocumentProps> = ({ contacts, settings, formData }) => {
+export const CertificateDocument: React.FC<CertificateDocumentProps> = ({ 
+  contactsWithInvoices, 
+  contacts, 
+  settings, 
+  formData 
+}) => {
   const baseUrl = window.location.origin;
+
+  const items: ContactWithInvoice[] = contactsWithInvoices || (contacts || []).map(c => ({
+    contact: c,
+    invoiceNumber: ''
+  }));
 
   const getSalutation = (c: Contact) => {
       if (c.gender === 'male') return `Lieber ${c.firstName},`;
@@ -33,16 +49,18 @@ export const CertificateDocument: React.FC<CertificateDocumentProps> = ({ contac
     return `${start} bis ${end}`;
   };
 
-  const replacePlaceholders = (text: string) => {
+  const replacePlaceholders = (text: string, invNum: string) => {
     return text
       .replace(/{Titel}/g, formData.title)
       .replace(/{Ort}/g, formData.location)
-      .replace(/{Datum}/g, getDateString());
+      .replace(/{Datum}/g, getDateString())
+      .replace(/{Belegnummer}/g, invNum)
+      .replace(/{Nummer}/g, invNum);
   };
 
   return (
     <Document>
-      {contacts.map((contact) => (
+      {items.map(({ contact, invoiceNumber }) => (
         <Page key={contact.id} size="A4" style={pdfStyles.page}>
           <View style={pdfStyles.header}>
             <Image src={`${baseUrl}/logo1.png`} style={pdfStyles.logoLeft} />
@@ -60,15 +78,23 @@ export const CertificateDocument: React.FC<CertificateDocumentProps> = ({ contac
           <View style={pdfStyles.metaBlock}>
             <Text>www.alpinkader.nrw</Text>
             <Text>Info@alpinkader.nrw</Text>
-            <Text style={{ marginTop: 10, color: '#000' }}>{new Date().toLocaleDateString('de-DE')}</Text>
+            <Text style={{ marginTop: 8, color: '#000' }}>Datum: {new Date().toLocaleDateString('de-DE')}</Text>
+            {invoiceNumber ? (
+              <Text style={{ marginTop: 4, fontFamily: 'Helvetica-Bold', color: '#000' }}>Beleg-Nr.: {invoiceNumber}</Text>
+            ) : null}
           </View>
 
-          <Text style={[pdfStyles.title, { fontSize: 24, marginTop: 20, marginBottom: 30 }]}>Teilnahmebescheinigung</Text>
+          <Text style={[pdfStyles.title, { fontSize: 24, marginTop: 20, marginBottom: 6 }]}>Teilnahmebescheinigung</Text>
+          {invoiceNumber ? (
+            <Text style={{ fontSize: 10, color: '#475569', marginBottom: 20 }}>Bescheinigungs-Nr.: {invoiceNumber}</Text>
+          ) : (
+            <View style={{ marginBottom: 20 }} />
+          )}
 
           <Text style={pdfStyles.text}>{getSalutation(contact)}</Text>
           
           <Text style={[pdfStyles.text, { lineHeight: 2 }]}>
-              {replacePlaceholders(formData.text)}
+              {replacePlaceholders(formData.text, invoiceNumber)}
           </Text>
 
           <View style={pdfStyles.footer}>

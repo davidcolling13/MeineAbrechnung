@@ -61,8 +61,7 @@ export const BulkOrders: React.FC<BulkOrdersProps> = ({ contacts }) => {
   const processFile = async (file: File) => {
     setErrorMsg(null);
     try {
-        const nextInvNum = await db.getNextInvoiceNumber('B');
-        const result = await parseBulkOrderExcel(file, contacts, nextInvNum);
+        const result = await parseBulkOrderExcel(file, contacts);
         setUnmatchedNames(result.unmatchedNames);
         setGeneratedInvoices(result.invoices);
         setStep(2);

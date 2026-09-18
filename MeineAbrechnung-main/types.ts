@@ -32,6 +32,10 @@ export interface AppSettings {
   senderLine: string;
   footerInfo: string[];
   
+  // Globale Belegnummern-Einstellungen
+  nextDocNumber?: number;
+  docNumberPrefix?: string;
+
   // SMTP Settings
   smtpHost?: string;
   smtpPort?: string; // String for easier input handling, parsed to int on usage

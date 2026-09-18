@@ -24,6 +24,8 @@ const defaultSettings: AppSettings = {
     bankDetails: BULK_ORDER_PAYMENT_TEXT,
     senderLine: SENDER_LINE,
     footerInfo: FOOTER_INFO,
+    nextDocNumber: 1,
+    docNumberPrefix: '',
     smtpHost: '',
     smtpPort: '587',
     smtpUser: '',
@@ -160,26 +162,81 @@ export const db = {
       if (!response.ok) throw new Error("Fehler beim Speichern der Einstellungen");
   },
 
-  // --- INVOICE HISTORY ---
-  async getNextInvoiceNumber(prefix: string): Promise<string> {
-      const invoices = await this.getInvoices();
-      const currentYear = new Date().getFullYear().toString();
-      
-      const pattern = new RegExp(`^${prefix}-${currentYear}-(\\d{3})$`);
-      let maxNumber = 0;
-      
-      for (const inv of invoices) {
-          const match = inv.invoiceNumber.match(pattern);
-          if (match) {
-              const num = parseInt(match[1], 10);
-              if (num > maxNumber) maxNumber = num;
+  // --- GLOBALE DOKUMENTENNUMMERN ---
+  async getNextDocumentNumber(): Promise<{ nextNumber: string; counter: number }> {
+      if (isOffline) {
+          const invoices = getLocal<InvoiceRecord[]>(INVOICES_KEY) || [];
+          const currentYear = new Date().getFullYear().toString();
+          let maxFound = 0;
+          for (const inv of invoices) {
+              const match = inv.invoiceNumber?.match(/(\d{4})-(\d+)/);
+              if (match && match[1] === currentYear) {
+                  const num = parseInt(match[2], 10);
+                  if (num > maxFound) maxFound = num;
+              }
           }
+          const settings = getLocal<AppSettings>(SETTINGS_KEY) || defaultSettings;
+          const start = Math.max(maxFound + 1, settings.nextDocNumber || 1);
+          const prefix = settings.docNumberPrefix || '';
+          const padLength = start >= 1000 ? 4 : 3;
+          const numStr = start.toString().padStart(padLength, '0');
+          const nextNumber = prefix ? `${prefix}${currentYear}-${numStr}` : `${currentYear}-${numStr}`;
+          return { nextNumber, counter: start };
       }
-      
-      const nextNumberStr = (maxNumber + 1).toString().padStart(3, '0');
-      return `${prefix}-${currentYear}-${nextNumberStr}`;
+      const response = await fetch('/api/documents/next-number');
+      if (!response.ok) throw new Error("Fehler beim Abrufen der nächsten Belegnummer");
+      return await response.json();
   },
 
+  async allocateDocumentNumbers(count: number = 1): Promise<string[]> {
+      if (isOffline) {
+          const { nextNumber, counter } = await this.getNextDocumentNumber();
+          const settings = getLocal<AppSettings>(SETTINGS_KEY) || defaultSettings;
+          const currentYear = new Date().getFullYear().toString();
+          const prefix = settings.docNumberPrefix || '';
+          const numbers: string[] = [];
+          for (let i = 0; i < count; i++) {
+              const c = counter + i;
+              const padLength = c >= 1000 ? 4 : 3;
+              numbers.push(prefix ? `${prefix}${currentYear}-${c.toString().padStart(padLength, '0')}` : `${currentYear}-${c.toString().padStart(padLength, '0')}`);
+          }
+          settings.nextDocNumber = counter + count;
+          saveLocal(SETTINGS_KEY, settings);
+          return numbers;
+      }
+      const response = await fetch('/api/documents/allocate-numbers', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ count })
+      });
+      if (!response.ok) throw new Error("Fehler beim Zuweisen der Belegnummern");
+      const data = await response.json();
+      return data.numbers;
+  },
+
+  async syncDocumentCounter(): Promise<{ counter: number; nextNumber: string }> {
+      if (isOffline) {
+          const invoices = getLocal<InvoiceRecord[]>(INVOICES_KEY) || [];
+          const currentYear = new Date().getFullYear().toString();
+          let maxFound = 0;
+          for (const inv of invoices) {
+              const match = inv.invoiceNumber?.match(/(\d{4})-(\d+)/);
+              if (match && match[1] === currentYear) {
+                  const num = parseInt(match[2], 10);
+                  if (num > maxFound) maxFound = num;
+              }
+          }
+          const settings = getLocal<AppSettings>(SETTINGS_KEY) || defaultSettings;
+          settings.nextDocNumber = maxFound + 1;
+          saveLocal(SETTINGS_KEY, settings);
+          return await this.getNextDocumentNumber();
+      }
+      const response = await fetch('/api/documents/sync-counter', { method: 'POST' });
+      if (!response.ok) throw new Error("Fehler beim Synchronisieren des Belegnummern-Zählers");
+      return await response.json();
+  },
+
+  // --- INVOICE HISTORY ---
   async getInvoices(): Promise<InvoiceRecord[]> {
       if (isOffline) return getLocal<InvoiceRecord[]>(INVOICES_KEY) || [];
       

@@ -36,7 +36,8 @@ export const BulkInvoiceDocument: React.FC<BulkInvoiceDocumentProps> = ({ invoic
         <View style={pdfStyles.metaBlock}>
           <Text>www.alpinkader.nrw</Text>
           <Text>Info@alpinkader.nrw</Text>
-          <Text style={{ marginTop: 10, color: '#000' }}>{invoice.date}</Text>
+          <Text style={{ marginTop: 8, color: '#000' }}>Datum: {invoice.date}</Text>
+          <Text style={{ marginTop: 4, fontFamily: 'Helvetica-Bold', color: '#000' }}>Beleg-Nr.: {invoice.invoiceNumber}</Text>
         </View>
 
         {/* Title */}

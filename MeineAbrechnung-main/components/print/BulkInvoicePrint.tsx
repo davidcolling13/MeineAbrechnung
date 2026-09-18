@@ -41,6 +41,7 @@ export const BulkInvoicePrint: React.FC<BulkInvoicePrintProps> = ({ invoice }) =
                      <p className="mb-1"><a href="http://www.alpinkader.nrw" className="text-blue-600 underline">www.alpinkader.nrw</a></p>
                      <p className="mb-4">✉ Info@alpinkader.nrw</p>
                      <p className="text-black text-sm">{invoice.date}</p>
+                     <p className="text-black font-semibold text-sm">Beleg-Nr.: {invoice.invoiceNumber}</p>
                 </div>
              </div>
              <h1 className="text-xl font-bold mb-4">Rechnung {invoice.invoiceNumber}</h1>

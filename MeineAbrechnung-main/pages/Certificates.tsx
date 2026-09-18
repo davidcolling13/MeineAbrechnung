@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Contact, AppSettings } from '../types';
 import { db } from '../services/db';
-import { Download, Calendar, Mail, Loader2 } from 'lucide-react';
+import { Download, Calendar, Mail, Loader2, Printer, Hash } from 'lucide-react';
 import { CardSkeleton } from '../components/Skeleton';
 import { PDFDownloadLink, pdf } from '@react-pdf/renderer';
 import { CertificateDocument } from '../components/pdf/CertificateDocument';
+import { CertificatePrint } from '../components/print/CertificatePrint';
 import { useToast } from '../components/Toast';
 import { generateUUID } from '../utils/formatting';
 
@@ -17,6 +18,7 @@ export const Certificates: React.FC<CertificatesProps> = ({ contacts }) => {
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [sendingState, setSendingState] = useState({ current: 0, total: 0, active: false });
+  const [nextDocInfo, setNextDocInfo] = useState<{ nextNumber: string; counter: number } | null>(null);
   const { addToast } = useToast();
 
   // Filter: Nur Athleten erhalten Bescheinigungen
@@ -30,19 +32,29 @@ export const Certificates: React.FC<CertificatesProps> = ({ contacts }) => {
     text: ''
   });
 
+  const loadDocNumber = async () => {
+    try {
+      const info = await db.getNextDocumentNumber();
+      setNextDocInfo(info);
+    } catch (e) {
+      console.error("Fehler beim Abrufen der Belegnummer:", e);
+    }
+  };
+
   useEffect(() => {
-    const loadSettings = async () => {
+    const loadData = async () => {
         try {
             const s = await db.getSettings();
             setSettings(s);
             setFormData(prev => ({ ...prev, text: s.certificateText }));
+            await loadDocNumber();
         } catch (e) {
             console.error(e);
         } finally {
             setIsLoading(false);
         }
     };
-    loadSettings();
+    loadData();
   }, []);
 
   const toggleContact = (id: string) => {
@@ -52,66 +64,67 @@ export const Certificates: React.FC<CertificatesProps> = ({ contacts }) => {
   };
 
   const selectAll = () => {
-    if (selectedContacts.length === athletes.length) setSelectedContacts([]);
-    else setSelectedContacts(athletes.map(c => c.id));
-  };
-
-  const handleSaveToHistory = async (contact: Contact, method: 'download' | 'email', invNumber: string) => {
-    try {
-        await db.saveInvoice({
-            id: generateUUID(),
-            invoiceNumber: invNumber,
-            recipientName: `${contact.firstName} ${contact.lastName}`,
-            date: new Date().toISOString().split('T')[0], 
-            totalAmount: 0,
-            title: `Teilnahmebescheinigung: ${formData.title}`,
-            type: 'Certificate',
-            deliveryMethod: method
-        });
-    } catch (e) {
-        console.error("Archiving certificate failed", e);
+    if (selectedContacts.length === athletes.length && athletes.length > 0) {
+      setSelectedContacts([]);
+    } else {
+      setSelectedContacts(athletes.map(c => c.id));
     }
   };
 
-  const handleDownload = async () => {
-      if (!settings || selectedContacts.length === 0) return;
-      
-      try {
-          const nextInvStr = await db.getNextInvoiceNumber('BES');
-          let numVal = parseInt(nextInvStr.split('-').pop() || '0', 10);
-          const prefix = nextInvStr.split('-').slice(0, 2).join('-');
-          
-          const contactsWithInvoices = selectedContacts.map(id => {
-              const c = contacts.find(c => c.id === id);
-              const invNum = `${prefix}-${numVal.toString().padStart(3, '0')}`;
-              numVal++;
-              return { contact: c, invoiceNumber: invNum };
-          }).filter(c => c.contact) as { contact: Contact, invoiceNumber: string }[];
-          
-          const blob = await pdf(
-              <CertificateDocument 
-                contactsWithInvoices={contactsWithInvoices}
-                settings={settings}
-                formData={formData}
-              />
-          ).toBlob();
-          
-          for (const item of contactsWithInvoices) {
-              await handleSaveToHistory(item.contact, 'download', item.invoiceNumber);
-          }
-          
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = `Bescheinigung_${contactsWithInvoices.length === 1 ? contactsWithInvoices[0].contact.lastName : 'Sammel'}.pdf`;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          URL.revokeObjectURL(url);
-          
-      } catch (e) {
-          console.error(e);
+  // Berechne die voraussichtlichen globalen Belegnummern für die ausgewählten Kontakte
+  const getProjectedNumbers = (): Record<string, string> => {
+    if (!nextDocInfo) return {};
+    const map: Record<string, string> = {};
+    const year = new Date().getFullYear().toString();
+    const prefix = settings?.docNumberPrefix || '';
+    
+    selectedContacts.forEach((id, idx) => {
+        const c = nextDocInfo.counter + idx;
+        const padLength = c >= 1000 ? 4 : 3;
+        const numStr = c.toString().padStart(padLength, '0');
+        map[id] = prefix ? `${prefix}${year}-${numStr}` : `${year}-${numStr}`;
+    });
+    return map;
+  };
+
+  const projectedNumbers = getProjectedNumbers();
+
+  const contactsWithInvoices = selectedContacts
+    .map(id => {
+      const contact = contacts.find(c => c.id === id);
+      if (!contact) return null;
+      return {
+        contact,
+        invoiceNumber: projectedNumbers[id] || nextDocInfo?.nextNumber || ''
+      };
+    })
+    .filter((item): item is { contact: Contact; invoiceNumber: string } => item !== null);
+
+  const handleDownloadClick = async () => {
+    if (selectedContacts.length === 0) return;
+    try {
+      const allocated = await db.allocateDocumentNumbers(selectedContacts.length);
+      for (let i = 0; i < selectedContacts.length; i++) {
+        const id = selectedContacts[i];
+        const contact = contacts.find(c => c.id === id);
+        if (contact) {
+          await db.saveInvoice({
+            id: generateUUID(),
+            invoiceNumber: allocated[i],
+            recipientName: `${contact.firstName} ${contact.lastName}`,
+            date: formData.startDate || new Date().toISOString().split('T')[0],
+            totalAmount: 0,
+            title: `Teilnahmebescheinigung: ${formData.title}`,
+            type: 'Certificate',
+            deliveryMethod: 'download'
+          });
+        }
       }
+      await loadDocNumber();
+      addToast(`${selectedContacts.length} Bescheinigung(en) mit Belegnummer archiviert (${allocated[0]}${allocated.length > 1 ? ' bis ' + allocated[allocated.length - 1] : ''})`, 'success');
+    } catch (e: any) {
+      console.error("Fehler beim Archivieren:", e);
+    }
   };
 
   const handleBulkEmailSend = async () => {
@@ -119,63 +132,115 @@ export const Certificates: React.FC<CertificatesProps> = ({ contacts }) => {
       setSendingState({current: 0, total: selectedContacts.length, active: true});
       let successCount = 0;
 
-      const nextInvStr = await db.getNextInvoiceNumber('BES');
-      let numVal = parseInt(nextInvStr.split('-').pop() || '0', 10);
-      const prefix = nextInvStr.split('-').slice(0, 2).join('-');
+      try {
+        const allocated = await db.allocateDocumentNumbers(selectedContacts.length);
 
-      for (const id of selectedContacts) {
-          const contact = contacts.find(c => c.id === id);
-          if (!contact || !contact.email) continue;
-          
-          const invNum = `${prefix}-${numVal.toString().padStart(3, '0')}`;
-          
-          try {
-              const blob = await pdf(
-                  <CertificateDocument 
-                    contactsWithInvoices={[{ contact, invoiceNumber: invNum }]}
-                    settings={settings}
-                    formData={formData}
-                  />
-              ).toBlob();
-              
-              const reader = new FileReader();
-              const base64data = await new Promise<string>((resolve) => {
-                  reader.onloadend = () => resolve(reader.result as string);
-                  reader.readAsDataURL(blob);
-              });
+        for (let i = 0; i < selectedContacts.length; i++) {
+            const id = selectedContacts[i];
+            const contact = contacts.find(c => c.id === id);
+            if (!contact || !contact.email) continue;
+            
+            const docNumber = allocated[i];
 
-              const response = await fetch('/api/email/send', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        to: contact.email,
-                        subject: `Teilnahmebescheinigung: ${formData.title}`,
-                        text: `Hallo ${contact.firstName},\n\nanbei deine Teilnahmebescheinigung für den Lehrgang ${formData.title}.\n\nViele Grüße\nDAV Alpinkader NRW`,
-                        filename: `Bescheinigung_${contact.lastName}.pdf`,
-                        pdfBase64: base64data
-                    })
-              });
+            try {
+                const blob = await pdf(
+                    <CertificateDocument 
+                      contactsWithInvoices={[{ contact, invoiceNumber: docNumber }]}
+                      settings={settings}
+                      formData={formData}
+                    />
+                ).toBlob();
+                
+                const reader = new FileReader();
+                const base64data = await new Promise<string>((resolve) => {
+                    reader.onloadend = () => resolve(reader.result as string);
+                    reader.readAsDataURL(blob);
+                });
 
-              if (response.ok) {
-                  await handleSaveToHistory(contact, 'email', invNum);
-                  successCount++;
-                  numVal++;
-              }
-          } catch (e) {
-              console.error(`Fehler bei ${contact.lastName}`, e);
-          }
-          setSendingState(prev => ({...prev, current: prev.current + 1}));
+                const response = await fetch('/api/email/send', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                          to: contact.email,
+                          subject: `Teilnahmebescheinigung ${docNumber}: ${formData.title}`,
+                          text: `Hallo ${contact.firstName},\n\nanbei deine Teilnahmebescheinigung (Beleg-Nr. ${docNumber}) für den Lehrgang ${formData.title}.\n\nViele Grüße\nDAV Alpinkader NRW`,
+                          filename: `Bescheinigung_${docNumber}_${contact.lastName}.pdf`,
+                          pdfBase64: base64data
+                      })
+                });
+
+                if (response.ok) {
+                    await db.saveInvoice({
+                      id: generateUUID(),
+                      invoiceNumber: docNumber,
+                      recipientName: `${contact.firstName} ${contact.lastName}`,
+                      date: formData.startDate || new Date().toISOString().split('T')[0],
+                      totalAmount: 0,
+                      title: `Teilnahmebescheinigung: ${formData.title}`,
+                      type: 'Certificate',
+                      deliveryMethod: 'email'
+                    });
+                    successCount++;
+                }
+            } catch (e) {
+                console.error(`Fehler bei ${contact.lastName}`, e);
+            }
+            setSendingState(prev => ({...prev, current: prev.current + 1}));
+        }
+
+        await loadDocNumber();
+        addToast(`${successCount} von ${selectedContacts.length} E-Mails erfolgreich versendet.`, successCount === selectedContacts.length ? 'success' : 'info');
+      } catch (e: any) {
+        addToast(e.message || "Fehler beim E-Mail-Versand", 'error');
+      } finally {
+        setSendingState({current: 0, total: 0, active: false});
       }
+  };
 
-      setSendingState({current: 0, total: 0, active: false});
-      addToast(`${successCount} von ${selectedContacts.length} E-Mails erfolgreich versendet.`, successCount === selectedContacts.length ? 'success' : 'info');
+  const handlePrint = async () => {
+    if (selectedContacts.length === 0) return;
+    try {
+      const allocated = await db.allocateDocumentNumbers(selectedContacts.length);
+      for (let i = 0; i < selectedContacts.length; i++) {
+        const id = selectedContacts[i];
+        const contact = contacts.find(c => c.id === id);
+        if (contact) {
+          await db.saveInvoice({
+            id: generateUUID(),
+            invoiceNumber: allocated[i],
+            recipientName: `${contact.firstName} ${contact.lastName}`,
+            date: formData.startDate || new Date().toISOString().split('T')[0],
+            totalAmount: 0,
+            title: `Teilnahmebescheinigung: ${formData.title}`,
+            type: 'Certificate',
+            deliveryMethod: 'download'
+          });
+        }
+      }
+      await loadDocNumber();
+      window.print();
+    } catch (e) {
+      console.error(e);
+      window.print();
+    }
   };
 
   if (isLoading || !settings) return <CardSkeleton />;
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-slate-900">Lehrgangsbescheinigungen</h1>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Lehrgangsbescheinigungen</h1>
+          <p className="text-sm text-slate-500 mt-0.5">Erstelle und versende Teilnahmebescheinigungen mit globaler Belegnummer</p>
+        </div>
+        {nextDocInfo && (
+          <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 text-blue-800 px-3 py-1.5 rounded-lg text-sm font-medium">
+            <Hash className="w-4 h-4 text-blue-600" />
+            <span>Nächste globale Beleg-Nr.: <strong className="font-mono">{nextDocInfo.nextNumber}</strong></span>
+          </div>
+        )}
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Settings Column */}
@@ -185,7 +250,7 @@ export const Certificates: React.FC<CertificatesProps> = ({ contacts }) => {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Lehrgangsbezeichnung</label>
-                <input type="text" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} className="w-full rounded-lg border-slate-300 border px-3 py-2" />
+                <input type="text" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} className="w-full rounded-lg border-slate-300 border px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" />
               </div>
               
               <div className="grid grid-cols-2 gap-4">
@@ -193,25 +258,26 @@ export const Certificates: React.FC<CertificatesProps> = ({ contacts }) => {
                     <label className="block text-sm font-medium text-slate-700 mb-1">Startdatum</label>
                     <div className="relative">
                         <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
-                        <input type="date" value={formData.startDate} onChange={e => setFormData({...formData, startDate: e.target.value})} className="w-full rounded-lg border-slate-300 border pl-10 pr-2 py-2 text-sm" />
+                        <input type="date" value={formData.startDate} onChange={e => setFormData({...formData, startDate: e.target.value})} className="w-full rounded-lg border-slate-300 border pl-10 pr-2 py-2 text-sm focus:ring-2 focus:ring-blue-500" />
                     </div>
                 </div>
                 <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1">Enddatum</label>
                     <div className="relative">
                         <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
-                        <input type="date" value={formData.endDate} onChange={e => setFormData({...formData, endDate: e.target.value})} className="w-full rounded-lg border-slate-300 border pl-10 pr-2 py-2 text-sm" />
+                        <input type="date" value={formData.endDate} onChange={e => setFormData({...formData, endDate: e.target.value})} className="w-full rounded-lg border-slate-300 border pl-10 pr-2 py-2 text-sm focus:ring-2 focus:ring-blue-500" />
                     </div>
                 </div>
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Ort</label>
-                <input type="text" value={formData.location} onChange={e => setFormData({...formData, location: e.target.value})} className="w-full rounded-lg border-slate-300 border px-3 py-2" />
+                <input type="text" value={formData.location} onChange={e => setFormData({...formData, location: e.target.value})} className="w-full rounded-lg border-slate-300 border px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Textvorlage</label>
-                <textarea rows={6} value={formData.text} onChange={e => setFormData({...formData, text: e.target.value})} className="w-full rounded-lg border-slate-300 border px-3 py-2 font-mono text-sm" />
+                <textarea rows={6} value={formData.text} onChange={e => setFormData({...formData, text: e.target.value})} className="w-full rounded-lg border-slate-300 border px-3 py-2 font-mono text-sm focus:ring-2 focus:ring-blue-500" />
+                <p className="text-xs text-slate-400 mt-1">Platzhalter: {'{Titel}'}, {'{Ort}'}, {'{Datum}'}, {'{Belegnummer}'}</p>
               </div>
             </div>
           </div>
@@ -221,7 +287,14 @@ export const Certificates: React.FC<CertificatesProps> = ({ contacts }) => {
         <div className="lg:col-span-2 space-y-6">
            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 h-full flex flex-col">
               <div className="flex justify-between items-center mb-4">
-                <h3 className="font-bold text-lg text-slate-800">2. Teilnehmer auswählen (nur Athleten)</h3>
+                <div>
+                  <h3 className="font-bold text-lg text-slate-800">2. Teilnehmer auswählen (nur Athleten)</h3>
+                  {selectedContacts.length > 0 && nextDocInfo && (
+                    <p className="text-xs text-blue-600 font-mono mt-0.5">
+                      Belegnummernfolge: {projectedNumbers[selectedContacts[0]]} {selectedContacts.length > 1 ? `bis ${projectedNumbers[selectedContacts[selectedContacts.length - 1]]}` : ''}
+                    </p>
+                  )}
+                </div>
                 <button onClick={selectAll} className="text-sm text-blue-600 hover:text-blue-800 font-medium">
                   {selectedContacts.length === athletes.length && athletes.length > 0 ? 'Keine auswählen' : 'Alle auswählen'}
                 </button>
@@ -235,21 +308,32 @@ export const Certificates: React.FC<CertificatesProps> = ({ contacts }) => {
                         <input type="checkbox" checked={selectedContacts.length === athletes.length && athletes.length > 0} onChange={selectAll} className="rounded border-slate-300" />
                       </th>
                       <th className="px-4 py-3 text-left text-sm font-semibold text-slate-600">Name</th>
+                      <th className="px-4 py-3 text-left text-sm font-semibold text-slate-600">Vorgesehene Beleg-Nr.</th>
                       <th className="px-4 py-3 text-left text-sm font-semibold text-slate-600">Typ</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {athletes.length > 0 ? athletes.map(contact => (
-                      <tr key={contact.id} className="hover:bg-slate-50 cursor-pointer" onClick={() => toggleContact(contact.id)}>
-                        <td className="px-4 py-3">
-                          <input type="checkbox" checked={selectedContacts.includes(contact.id)} onChange={() => toggleContact(contact.id)} className="rounded border-slate-300 pointer-events-none" />
-                        </td>
-                        <td className="px-4 py-3 text-sm text-slate-800">{contact.lastName}, {contact.firstName}</td>
-                        <td className="px-4 py-3 text-sm text-slate-500">{contact.type}</td>
-                      </tr>
-                    )) : (
+                    {athletes.length > 0 ? athletes.map(contact => {
+                      const isSelected = selectedContacts.includes(contact.id);
+                      return (
+                        <tr key={contact.id} className="hover:bg-slate-50 cursor-pointer" onClick={() => toggleContact(contact.id)}>
+                          <td className="px-4 py-3">
+                            <input type="checkbox" checked={isSelected} onChange={() => toggleContact(contact.id)} className="rounded border-slate-300 pointer-events-none" />
+                          </td>
+                          <td className="px-4 py-3 text-sm text-slate-800 font-medium">{contact.lastName}, {contact.firstName}</td>
+                          <td className="px-4 py-3 text-xs font-mono text-slate-500">
+                            {isSelected ? (
+                              <span className="inline-block bg-blue-50 text-blue-700 px-2 py-0.5 rounded border border-blue-200">
+                                {projectedNumbers[contact.id]}
+                              </span>
+                            ) : '-'}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-slate-500">{contact.type}</td>
+                        </tr>
+                      );
+                    }) : (
                         <tr>
-                            <td colSpan={3} className="px-4 py-8 text-center text-slate-500 text-sm">
+                            <td colSpan={4} className="px-4 py-8 text-center text-slate-500 text-sm">
                                 Keine Athleten in den Stammdaten gefunden.
                             </td>
                         </tr>
@@ -258,27 +342,46 @@ export const Certificates: React.FC<CertificatesProps> = ({ contacts }) => {
                 </table>
               </div>
 
-              <div className="mt-6 pt-4 border-t border-slate-100 flex justify-between items-center">
-                 <span className="text-sm text-slate-500">{selectedContacts.length} Teilnehmer ausgewählt</span>
-                 <div className="flex gap-3">
+              <div className="mt-6 pt-4 border-t border-slate-100 flex flex-wrap gap-3 justify-between items-center">
+                 <span className="text-sm text-slate-500">{selectedContacts.length} von {athletes.length} ausgewählt</span>
+                 <div className="flex flex-wrap gap-2">
+                    <button 
+                      type="button"
+                      disabled={selectedContacts.length === 0}
+                      onClick={handlePrint}
+                      className="flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 px-4 py-2 rounded-lg disabled:opacity-40 transition-colors text-sm font-medium"
+                    >
+                      <Printer className="w-4 h-4" /> Drucken
+                    </button>
+
+                    {/* Generierung von PDFs on demand für den Download */}
                     {selectedContacts.length > 0 && (
                          <>
+                         <PDFDownloadLink
+                            document={
+                                <CertificateDocument 
+                                    contactsWithInvoices={contactsWithInvoices}
+                                    settings={settings}
+                                    formData={formData}
+                                />
+                            }
+                            fileName={`Bescheinigung_${selectedContacts.length === 1 ? contacts.find(c => c.id === selectedContacts[0])?.lastName : 'Sammel'}.pdf`}
+                            className="flex items-center gap-2 bg-slate-800 hover:bg-slate-900 text-white px-4 py-2 rounded-lg disabled:opacity-50 transition-colors decoration-0 text-sm font-medium"
+                            onClick={handleDownloadClick}
+                         >
+                            <Download className="w-4 h-4" /> {selectedContacts.length > 1 ? 'Sammel-PDF' : 'PDF Herunterladen'}
+                         </PDFDownloadLink>
+
                          <button 
                             disabled={selectedContacts.length === 0 || sendingState.active}
                             onClick={handleBulkEmailSend}
-                            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm font-medium"
                          >
                             {sendingState.active ? <Loader2 className="w-4 h-4 animate-spin"/> : <Mail className="w-4 h-4" />}
                             {sendingState.active 
                                 ? `Sende ${sendingState.current}/${sendingState.total}` 
                                 : 'Alle per E-Mail senden'
                             }
-                         </button>
-                         <button
-                            onClick={handleDownload}
-                            className="flex items-center gap-2 bg-slate-800 hover:bg-slate-900 text-white px-5 py-2.5 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors decoration-0"
-                         >
-                            <Download className="w-4 h-4" /> {selectedContacts.length > 1 ? 'Sammel-PDF herunterladen' : 'PDF herunterladen'}
                          </button>
                          </>
                     )}
@@ -287,6 +390,20 @@ export const Certificates: React.FC<CertificatesProps> = ({ contacts }) => {
            </div>
         </div>
       </div>
+
+      {/* Hidden Print Section */}
+      <CertificatePrint 
+        contacts={contacts}
+        selectedContactIds={selectedContacts}
+        settings={settings}
+        formData={{
+          title: formData.title,
+          location: formData.location,
+          date: formData.startDate,
+          text: formData.text
+        }}
+        invoiceNumbers={projectedNumbers}
+      />
     </div>
   );
 };

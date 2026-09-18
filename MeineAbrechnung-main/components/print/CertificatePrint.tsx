@@ -11,13 +11,15 @@ interface CertificatePrintProps {
     date: string;
     text: string;
   };
+  invoiceNumbers?: Record<string, string>;
 }
 
 export const CertificatePrint: React.FC<CertificatePrintProps> = ({ 
   contacts, 
   selectedContactIds, 
   settings, 
-  formData 
+  formData,
+  invoiceNumbers
 }) => {
   
   const getSalutation = (contact: Contact) => {
@@ -26,11 +28,13 @@ export const CertificatePrint: React.FC<CertificatePrintProps> = ({
     return `Hallo ${contact.firstName},`;
   };
 
-  const replacePlaceholders = (text: string) => {
+  const replacePlaceholders = (text: string, invNum: string) => {
     return text
       .replace(/{Titel}/g, formData.title)
       .replace(/{Ort}/g, formData.location)
-      .replace(/{Datum}/g, new Date(formData.date).toLocaleDateString('de-DE'));
+      .replace(/{Datum}/g, new Date(formData.date).toLocaleDateString('de-DE'))
+      .replace(/{Belegnummer}/g, invNum)
+      .replace(/{Nummer}/g, invNum);
   };
 
   return (
@@ -38,6 +42,8 @@ export const CertificatePrint: React.FC<CertificatePrintProps> = ({
       {selectedContactIds.map(id => {
         const contact = contacts.find(c => c.id === id);
         if (!contact) return null;
+        const invNum = invoiceNumbers?.[id] || '';
+
         return (
           <div key={id} className="h-screen print:h-[297mm] relative p-[15mm] flex flex-col break-after-page mx-auto max-w-[210mm] box-border">
              {/* Header */}
@@ -61,15 +67,20 @@ export const CertificatePrint: React.FC<CertificatePrintProps> = ({
                      <p className="mb-1"><a href="http://www.alpinkader.nrw" className="text-blue-600 underline">www.alpinkader.nrw</a></p>
                      <p className="mb-4">✉ Info@alpinkader.nrw</p>
                      <p className="text-black text-sm">{new Date().toISOString().split('T')[0]}</p>
+                     {invNum && <p className="text-black font-semibold text-sm">Beleg-Nr.: {invNum}</p>}
                 </div>
              </div>
 
-             
-             <h2 className="text-2xl font-bold mb-6">Teilnahmebescheinigung</h2>
+             <h2 className="text-2xl font-bold mb-1">Teilnahmebescheinigung</h2>
+             {invNum ? (
+               <p className="text-sm text-slate-600 mb-6">Bescheinigungs-Nr.: {invNum}</p>
+             ) : (
+               <div className="mb-6" />
+             )}
 
              <div className="text-[15px] leading-relaxed max-w-3xl mb-8">
                <p className="mb-6">{getSalutation(contact)}</p>
-               <p className="whitespace-pre-wrap">{replacePlaceholders(formData.text)}</p>
+               <p className="whitespace-pre-wrap">{replacePlaceholders(formData.text, invNum)}</p>
              </div>
 
              <div className="mt-auto pt-4 border-t border-slate-300 text-[8px] leading-tight text-slate-500">

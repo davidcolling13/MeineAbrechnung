@@ -455,6 +455,117 @@ app.delete('/api/invoices/:id', (req, res) => {
     }
 });
 
+// --- GLOBALE DOKUMENTENNUMMERIERUNG API ---
+function getDocumentNumberingState() {
+  const currentYear = new Date().getFullYear().toString();
+  
+  // 1. Höchste vergebene Belegnummer in der Invoices-Tabelle ermitteln
+  const rows = db.prepare('SELECT invoiceNumber FROM invoices').all();
+  let maxFound = 0;
+  for (const row of rows) {
+    if (!row.invoiceNumber) continue;
+    // Format YYYY-XXX oder [Prefix-]YYYY-XXX
+    const matchYear = row.invoiceNumber.match(/(\d{4})-(\d+)/);
+    if (matchYear && matchYear[1] === currentYear) {
+      const num = parseInt(matchYear[2], 10);
+      if (!isNaN(num) && num > maxFound) maxFound = num;
+    } else {
+      const matchEnd = row.invoiceNumber.match(/(\d+)$/);
+      if (matchEnd) {
+        const num = parseInt(matchEnd[1], 10);
+        if (!isNaN(num) && num > maxFound && num < 100000) maxFound = num;
+      }
+    }
+  }
+
+  // 2. Gespeicherte Zähler aus settings Tabelle lesen
+  let configuredStart = 1;
+  let prefix = '';
+  try {
+    const nextRow = db.prepare("SELECT value FROM settings WHERE key = 'nextDocNumber'").get();
+    if (nextRow && nextRow.value !== undefined) {
+      let val = nextRow.value;
+      try { val = JSON.parse(val); } catch (e) {}
+      const parsed = parseInt(val, 10);
+      if (!isNaN(parsed) && parsed > 0) configuredStart = parsed;
+    }
+    const prefixRow = db.prepare("SELECT value FROM settings WHERE key = 'docNumberPrefix'").get();
+    if (prefixRow && prefixRow.value !== undefined) {
+      let pVal = prefixRow.value;
+      try { pVal = JSON.parse(pVal); } catch (e) {}
+      if (typeof pVal === 'string') prefix = pVal.trim();
+    }
+  } catch (e) {
+    console.error("Fehler beim Lesen der Belegnummern-Einstellungen:", e);
+  }
+
+  const effectiveCounter = Math.max(maxFound + 1, configuredStart);
+  return {
+    currentYear,
+    maxFound,
+    configuredStart,
+    effectiveCounter,
+    prefix
+  };
+}
+
+function formatDocumentNumber(counter, year, prefix = '') {
+  const padLength = counter >= 1000 ? 4 : 3;
+  const counterStr = counter.toString().padStart(padLength, '0');
+  return prefix ? `${prefix}${year}-${counterStr}` : `${year}-${counterStr}`;
+}
+
+app.get('/api/documents/next-number', (req, res) => {
+    try {
+        const state = getDocumentNumberingState();
+        const nextNumber = formatDocumentNumber(state.effectiveCounter, state.currentYear, state.prefix);
+        res.json({
+            nextNumber,
+            counter: state.effectiveCounter,
+            currentYear: state.currentYear,
+            prefix: state.prefix,
+            maxFound: state.maxFound
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.post('/api/documents/allocate-numbers', (req, res) => {
+    try {
+        const count = Math.max(1, parseInt(req.body.count || 1, 10));
+        const allocateTx = db.transaction(() => {
+            const state = getDocumentNumberingState();
+            const numbers = [];
+            for (let i = 0; i < count; i++) {
+                numbers.push(formatDocumentNumber(state.effectiveCounter + i, state.currentYear, state.prefix));
+            }
+            const nextCounter = state.effectiveCounter + count;
+            db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('nextDocNumber', ?)").run(String(nextCounter));
+            logEvent('INFO', 'Dokumente', `${count} globale fortlaufende Belegnummer(n) vergeben: ${numbers[0]}${count > 1 ? ' bis ' + numbers[numbers.length - 1] : ''}`);
+            return { numbers, nextCounter };
+        });
+        const result = allocateTx();
+        res.json(result);
+    } catch (error) {
+        logEvent('ERROR', 'Dokumente', `Fehler beim Zuweisen der Belegnummern: ${error.message}`);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.post('/api/documents/sync-counter', (req, res) => {
+    try {
+        const state = getDocumentNumberingState();
+        const nextCounter = state.maxFound + 1;
+        db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('nextDocNumber', ?)").run(String(nextCounter));
+        const nextNumber = formatDocumentNumber(nextCounter, state.currentYear, state.prefix);
+        logEvent('INFO', 'Dokumente', `Belegnummern-Zähler auf ${nextCounter} (${nextNumber}) synchronisiert.`);
+        res.json({ success: true, counter: nextCounter, nextNumber });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // --- SYSTEM LOGS API ---
 const LogSchema = z.object({
   level: z.enum(['INFO', 'WARN', 'ERROR']).default('INFO'),

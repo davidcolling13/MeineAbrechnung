@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { AppSettings } from '../types';
 import { db } from '../services/db';
 import { useToast } from '../components/Toast';
-import { Save, RefreshCw, Server, ShieldCheck, Mail, Sliders, Activity } from 'lucide-react';
+import { Save, RefreshCw, Server, ShieldCheck, Mail, Sliders, Activity, Hash, RefreshCcw } from 'lucide-react';
 import { Skeleton } from '../components/Skeleton';
 import { SystemLogsView } from '../components/SystemLogsView';
 
@@ -12,6 +12,7 @@ export const Settings: React.FC = () => {
     const [activeTab, setActiveTab] = useState<SettingsTab>('general');
     const [settings, setSettings] = useState<AppSettings | null>(null);
     const [isLoading, setIsLoading] = useState(true);
+    const [isSyncingCounter, setIsSyncingCounter] = useState(false);
     const { addToast } = useToast();
 
     useEffect(() => {
@@ -40,6 +41,30 @@ export const Settings: React.FC = () => {
         }
     };
 
+    const handleSyncCounter = async () => {
+        setIsSyncingCounter(true);
+        try {
+            const res = await db.syncDocumentCounter();
+            const updated = await db.getSettings();
+            setSettings(updated);
+            addToast(`Zähler erfolgreich synchronisiert: Nächste Belegnummer ist ${res.nextNumber}`, "success");
+        } catch (e: any) {
+            addToast(e.message || "Fehler beim Synchronisieren des Zählers", "error");
+        } finally {
+            setIsSyncingCounter(false);
+        }
+    };
+
+    const getPreviewNumber = () => {
+        if (!settings) return '';
+        const year = new Date().getFullYear().toString();
+        const prefix = settings.docNumberPrefix || '';
+        const counter = settings.nextDocNumber || 1;
+        const padLength = counter >= 1000 ? 4 : 3;
+        const numStr = counter.toString().padStart(padLength, '0');
+        return prefix ? `${prefix}${year}-${numStr}` : `${year}-${numStr}`;
+    };
+
     if (isLoading || !settings) {
         return <div className="space-y-4"><Skeleton className="h-40 w-full" /><Skeleton className="h-40 w-full" /></div>;
     }
@@ -49,7 +74,7 @@ export const Settings: React.FC = () => {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
                     <h1 className="text-2xl font-bold text-slate-900">Einstellungen</h1>
-                    <p className="text-sm text-slate-500 mt-1">Konfiguration, E-Mail-Server, Vorlagen und Systemprotokoll</p>
+                    <p className="text-sm text-slate-500 mt-1">Konfiguration, Belegnummern, E-Mail-Server, Vorlagen und Systemprotokoll</p>
                 </div>
                 {activeTab === 'general' && (
                     <div className="flex gap-3">
@@ -90,6 +115,70 @@ export const Settings: React.FC = () => {
             ) : (
             <div className="grid gap-6">
                 
+                {/* Global Document Numbering */}
+                <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 pb-3 border-b border-slate-100">
+                        <div>
+                            <h3 className="font-bold text-lg flex items-center gap-2 text-slate-800">
+                                <Hash className="w-5 h-5 text-blue-600" /> Globale fortlaufende Dokumentennummerierung
+                            </h3>
+                            <p className="text-xs text-slate-500 mt-0.5">
+                                Einheitliche Belegnummer für alle Dokumente (Sammelrechnungen, Lehrgangsrechnungen und Bescheinigungen)
+                            </p>
+                        </div>
+                        <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-lg text-xs font-medium text-blue-800 self-start sm:self-auto">
+                            <span>Vorschau nächste Beleg-Nr.:</span>
+                            <span className="font-mono font-bold text-blue-900 bg-white px-1.5 py-0.5 rounded border border-blue-200">{getPreviewNumber()}</span>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="col-span-1">
+                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                                Belegnummer-Präfix (optional)
+                            </label>
+                            <input 
+                                type="text" 
+                                placeholder="z.B. RE- oder leer lassen"
+                                value={settings.docNumberPrefix || ''} 
+                                onChange={e => setSettings({...settings, docNumberPrefix: e.target.value})}
+                                className="w-full rounded-lg border-slate-300 border px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+                            />
+                            <p className="text-xs text-slate-400 mt-1">
+                                Wenn leer, wird das Format <code>JAHR-NUMMER</code> (z.B. <code>{new Date().getFullYear()}-001</code>) verwendet.
+                            </p>
+                        </div>
+
+                        <div className="col-span-1">
+                            <label className="block text-sm font-medium text-slate-700 mb-1">
+                                Nächster Zählerstand
+                            </label>
+                            <div className="flex gap-2">
+                                <input 
+                                    type="number" 
+                                    min="1"
+                                    value={settings.nextDocNumber || 1} 
+                                    onChange={e => setSettings({...settings, nextDocNumber: Math.max(1, parseInt(e.target.value) || 1)})}
+                                    className="w-full rounded-lg border-slate-300 border px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+                                />
+                                <button 
+                                    type="button"
+                                    onClick={handleSyncCounter}
+                                    disabled={isSyncingCounter}
+                                    title="Zählerstand mit vorhandenen Rechnungen und Dokumenten in der Datenbank synchronisieren"
+                                    className="flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-lg text-xs font-medium whitespace-nowrap transition-colors disabled:opacity-50"
+                                >
+                                    <RefreshCcw className={`w-3.5 h-3.5 ${isSyncingCounter ? 'animate-spin' : ''}`} />
+                                    DB-Abgleich
+                                </button>
+                            </div>
+                            <p className="text-xs text-slate-400 mt-1">
+                                Manueller Start- oder Zählerstand. Bei jedem Dokumentenexport wird dieser Zähler automatisch fortgeschrieben.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
                 {/* SMTP Settings */}
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
                     <h3 className="font-bold text-lg mb-4 flex items-center gap-2 text-slate-800">
@@ -172,7 +261,7 @@ export const Settings: React.FC = () => {
                 {/* Invoice Text */}
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
                     <h3 className="font-bold text-lg mb-2">Standardtext: Lehrgangsrechnungen</h3>
-                    <p className="text-xs text-slate-500 mb-3">Platzhalter: {'{Titel}'}, {'{Ort}'}, {'{Datum}'}, {'{Gebühr}'}, {'{Frist}'}</p>
+                    <p className="text-xs text-slate-500 mb-3">Platzhalter: {'{Titel}'}, {'{Ort}'}, {'{Datum}'}, {'{Gebühr}'}, {'{Frist}'}, {'{Belegnummer}'}</p>
                     <textarea 
                         rows={6} 
                         value={settings.invoiceText} 
@@ -184,7 +273,7 @@ export const Settings: React.FC = () => {
                 {/* Certificate Text */}
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
                     <h3 className="font-bold text-lg mb-2">Standardtext: Bescheinigungen</h3>
-                    <p className="text-xs text-slate-500 mb-3">Platzhalter: {'{Titel}'}, {'{Ort}'}, {'{Datum}'}</p>
+                    <p className="text-xs text-slate-500 mb-3">Platzhalter: {'{Titel}'}, {'{Ort}'}, {'{Datum}'}, {'{Belegnummer}'}</p>
                     <textarea 
                         rows={4} 
                         value={settings.certificateText} 
@@ -208,7 +297,7 @@ export const Settings: React.FC = () => {
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
                     <h3 className="font-bold text-lg mb-2">Absenderzeile (PDF Kopf)</h3>
                     <input 
-                        type="text"
+                        type="text" 
                         value={settings.senderLine} 
                         onChange={e => setSettings({...settings, senderLine: e.target.value})}
                         className="w-full rounded-lg border-slate-300 border px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"

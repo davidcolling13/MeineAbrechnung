@@ -12,13 +12,15 @@ interface TrainingInvoicePrintProps {
     fee: number;
     text: string;
   };
+  invoiceNumbers?: Record<string, string>;
 }
 
 export const TrainingInvoicePrint: React.FC<TrainingInvoicePrintProps> = ({ 
   contacts, 
   selectedContactIds, 
   settings, 
-  formData 
+  formData,
+  invoiceNumbers
 }) => {
   
   const getPaymentDeadline = (dateStr: string) => {
@@ -33,20 +35,24 @@ export const TrainingInvoicePrint: React.FC<TrainingInvoicePrintProps> = ({
       return `Hallo ${contact.firstName},`;
   };
 
-  const replacePlaceholders = (text: string, contact: Contact) => {
+  const replacePlaceholders = (text: string, contact: Contact, invNum: string) => {
     return text
       .replace(/{Titel}/g, formData.title)
       .replace(/{Ort}/g, formData.location)
       .replace(/{Datum}/g, new Date(formData.date).toLocaleDateString('de-DE'))
       .replace(/{Gebühr}/g, formData.fee.toFixed(2))
-      .replace(/{Frist}/g, getPaymentDeadline(formData.date));
+      .replace(/{Frist}/g, getPaymentDeadline(formData.date))
+      .replace(/{Belegnummer}/g, invNum)
+      .replace(/{Nummer}/g, invNum);
   };
 
   return (
     <div id="print-area" className="hidden print:block font-sans text-black bg-white">
-       {selectedContactIds.map(id => {
+       {selectedContactIds.map((id, index) => {
         const contact = contacts.find(c => c.id === id);
         if (!contact) return null;
+        const invNum = invoiceNumbers?.[id] || '';
+
         return (
           <div key={id} className="h-screen print:h-[297mm] relative p-[15mm] flex flex-col break-after-page mx-auto max-w-[210mm] box-border">
              {/* Header */}
@@ -70,13 +76,14 @@ export const TrainingInvoicePrint: React.FC<TrainingInvoicePrintProps> = ({
                      <p className="mb-1"><a href="http://www.alpinkader.nrw" className="text-blue-600 underline">www.alpinkader.nrw</a></p>
                      <p className="mb-4">✉ Info@alpinkader.nrw</p>
                      <p className="text-black text-sm">{new Date().toISOString().split('T')[0]}</p>
+                     {invNum && <p className="text-black font-semibold text-sm">Beleg-Nr.: {invNum}</p>}
                 </div>
              </div>
 
              <h1 className="text-xl font-bold mb-8">Rechnung Lehrgang: {formData.title}</h1>
              <p className="mb-6">{getSalutation(contact)}</p>
              <div className="whitespace-pre-wrap text-[15px] leading-relaxed font-normal mb-8">
-                {replacePlaceholders(formData.text, contact)}
+                {replacePlaceholders(formData.text, contact, invNum)}
              </div>
 
              <div className="mt-auto pt-4 border-t border-slate-300 text-[8px] leading-tight text-slate-500">

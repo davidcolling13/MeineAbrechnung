@@ -2,6 +2,7 @@ import { Contact, BulkOrderItem } from '../types';
 import { roundCurrency, parseGermanFloat } from '../utils/formatting';
 // @ts-ignore
 import readXlsxFile from 'read-excel-file';
+import { db } from './db';
 
 export interface ParseResult {
   invoices: GeneratedInvoiceData[];
@@ -122,46 +123,44 @@ export const parseBulkOrderExcel = async (file: File, contacts: Contact[], start
       });
   });
 
-  const newInvoices: GeneratedInvoiceData[] = [];
-  
-  // Extract number from startInvoiceNumber or default to 1
-  let invoiceCounter = 1;
-  const currentYear = new Date().getFullYear().toString();
-  let prefix = `B-${currentYear}`;
-  
-  if (startInvoiceNumber) {
-      prefix = startInvoiceNumber.split('-').slice(0, 2).join('-');
-      invoiceCounter = parseInt(startInvoiceNumber.split('-').pop() || '1', 10);
-  }
-  
-  const now = new Date();
-  const displayDate = now.toLocaleDateString('de-DE');
-  const isoDate = now.toISOString().split('T')[0];
+  const matchedOrders: { contact: Contact; items: BulkOrderItem[]; name: string }[] = [];
   
   ordersByPerson.forEach((items, name) => {
       const contact = findContact(name, contacts);
-      
       if (contact) {
-          const itemsTotal = items.reduce((sum, item) => roundCurrency(sum + item.totalPrice), 0);
-          const specificShipping = shippingByPerson.get(name);
-          const finalShipping = specificShipping !== undefined ? specificShipping : 0;
-          const finalTotal = roundCurrency(itemsTotal + finalShipping);
-          const invNum = `${prefix}-${invoiceCounter.toString().padStart(3, '0')}`;
-          invoiceCounter++;
-
-          newInvoices.push({
-              id: `inv-${contact.id}-${Date.now()}`,
-              invoiceNumber: invNum,
-              contact: contact,
-              items: items.map(i => ({...i, contactId: contact.id})),
-              shippingCost: finalShipping,
-              total: finalTotal,
-              date: displayDate,
-              isoDate: isoDate
-          });
+          matchedOrders.push({ contact, items, name });
       } else {
           missingContacts.add(name);
       }
+  });
+
+  // Globale fortlaufende Belegnummern für alle Rechnungen dieser Sammelbestellung allokieren
+  const allocatedNumbers = matchedOrders.length > 0
+      ? await db.allocateDocumentNumbers(matchedOrders.length)
+      : [];
+
+  const now = new Date();
+  const displayDate = now.toLocaleDateString('de-DE');
+  const isoDate = now.toISOString().split('T')[0];
+  const newInvoices: GeneratedInvoiceData[] = [];
+
+  matchedOrders.forEach(({ contact, items, name }, idx) => {
+      const itemsTotal = items.reduce((sum, item) => roundCurrency(sum + item.totalPrice), 0);
+      const specificShipping = shippingByPerson.get(name);
+      const finalShipping = specificShipping !== undefined ? specificShipping : 0;
+      const finalTotal = roundCurrency(itemsTotal + finalShipping);
+      const invNum = allocatedNumbers[idx] || `DOC-${idx + 1}`;
+
+      newInvoices.push({
+          id: `inv-${contact.id}-${Date.now()}-${idx}`,
+          invoiceNumber: invNum,
+          contact: contact,
+          items: items.map(i => ({...i, contactId: contact.id})),
+          shippingCost: finalShipping,
+          total: finalTotal,
+          date: displayDate,
+          isoDate: isoDate
+      });
   });
 
   return {
