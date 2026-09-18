@@ -2,6 +2,7 @@ import React from 'react';
 import { Document, Page, Text, View, Image } from '@react-pdf/renderer';
 import { Contact, AppSettings } from '../../types';
 import { pdfStyles } from './SharedStyles';
+import { calculateDueDate, formatDateDE } from '../../utils/formatting';
 
 export interface ContactWithInvoice {
   contact: Contact;
@@ -14,6 +15,7 @@ interface TrainingInvoiceDocumentProps {
   settings: AppSettings;
   formData: {
     title: string;
+    invoiceDate?: string;
     location: string;
     startDate: string;
     endDate: string;
@@ -35,11 +37,9 @@ export const TrainingInvoiceDocument: React.FC<TrainingInvoiceDocumentProps> = (
     invoiceNumber: ''
   }));
 
-  const getPaymentDeadline = (dateStr: string) => {
-    const date = new Date(dateStr);
-    date.setDate(date.getDate() + 14); 
-    return date.toLocaleDateString('de-DE');
-  };
+  const invoiceDateStr = formData.invoiceDate || new Date().toISOString().split('T')[0];
+  const dueDateFormatted = calculateDueDate(invoiceDateStr, 14);
+  const invoiceDateFormatted = formatDateDE(invoiceDateStr);
 
   const getSalutation = (c: Contact) => {
       if (c.gender === 'male') return `Lieber ${c.firstName},`;
@@ -48,11 +48,11 @@ export const TrainingInvoiceDocument: React.FC<TrainingInvoiceDocumentProps> = (
   };
 
   const getDateString = () => {
-    const start = new Date(formData.startDate).toLocaleDateString('de-DE');
+    const start = formatDateDE(formData.startDate);
     if (!formData.endDate || formData.startDate === formData.endDate) {
       return start;
     }
-    const end = new Date(formData.endDate).toLocaleDateString('de-DE');
+    const end = formatDateDE(formData.endDate);
     return `${start} bis ${end}`;
   };
 
@@ -61,8 +61,11 @@ export const TrainingInvoiceDocument: React.FC<TrainingInvoiceDocumentProps> = (
       .replace(/{Titel}/g, formData.title)
       .replace(/{Ort}/g, formData.location)
       .replace(/{Datum}/g, getDateString())
+      .replace(/{Rechnungsdatum}/g, invoiceDateFormatted)
       .replace(/{Gebühr}/g, formData.fee.toFixed(2))
-      .replace(/{Frist}/g, getPaymentDeadline(formData.startDate))
+      .replace(/{Frist}/g, dueDateFormatted)
+      .replace(/{Zahlungsziel}/g, dueDateFormatted)
+      .replace(/{Rechnungsdatum}/g, invoiceDateFormatted)
       .replace(/{Belegnummer}/g, invNum)
       .replace(/{Nummer}/g, invNum);
   };
@@ -87,13 +90,14 @@ export const TrainingInvoiceDocument: React.FC<TrainingInvoiceDocumentProps> = (
           <View style={pdfStyles.metaBlock}>
             <Text>www.alpinkader.nrw</Text>
             <Text>Info@alpinkader.nrw</Text>
-            <Text style={{ marginTop: 8, color: '#000' }}>Datum: {new Date().toLocaleDateString('de-DE')}</Text>
+            <Text style={{ marginTop: 8, color: '#000' }}>Rechnungsdatum: {invoiceDateFormatted}</Text>
+            <Text style={{ marginTop: 2, color: '#1e40af', fontFamily: 'Helvetica-Bold' }}>Zahlungsziel: {dueDateFormatted}</Text>
             {invoiceNumber ? (
               <Text style={{ marginTop: 4, fontFamily: 'Helvetica-Bold', color: '#000' }}>Beleg-Nr.: {invoiceNumber}</Text>
             ) : null}
           </View>
 
-          <Text style={pdfStyles.title}>Rechnung Lehrgang: {formData.title}</Text>
+          <Text style={pdfStyles.title}>{invoiceNumber ? `Rechnung ${invoiceNumber}: Lehrgang ${formData.title}` : `Rechnung Lehrgang: ${formData.title}`}</Text>
 
           <Text style={pdfStyles.text}>{getSalutation(contact)}</Text>
           

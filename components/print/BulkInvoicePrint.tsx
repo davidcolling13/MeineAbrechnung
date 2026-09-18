@@ -1,6 +1,7 @@
 import React from 'react';
 import { Contact, BulkOrderItem } from '../../types';
 import { BULK_ORDER_PAYMENT_TEXT, FOOTER_INFO, SENDER_LINE } from '../../constants';
+import { calculateDueDate } from '../../utils/formatting';
 
 // Interface matching the generated data structure
 export interface InvoicePrintData {
@@ -11,6 +12,8 @@ export interface InvoicePrintData {
   shippingCost: number;
   total: number;
   date: string;
+  isoDate?: string;
+  dueDate?: string;
 }
 
 interface BulkInvoicePrintProps {
@@ -19,6 +22,14 @@ interface BulkInvoicePrintProps {
 
 export const BulkInvoicePrint: React.FC<BulkInvoicePrintProps> = ({ invoice }) => {
   if (!invoice) return null;
+
+  const dueDate = invoice.dueDate || calculateDueDate(invoice.isoDate || invoice.date, 14);
+  const paymentText = BULK_ORDER_PAYMENT_TEXT
+    .replace(/{Frist}/g, dueDate)
+    .replace(/{Zahlungsziel}/g, dueDate)
+    .replace(/{Rechnungsdatum}/g, invoice.date)
+    .replace(/{Belegnummer}/g, invoice.invoiceNumber)
+    .replace(/{Nummer}/g, invoice.invoiceNumber);
 
   return (
     <div id="print-area" className="hidden print:block font-sans text-black bg-white">
@@ -39,12 +50,13 @@ export const BulkInvoicePrint: React.FC<BulkInvoicePrintProps> = ({ invoice }) =
 
                 <div className="text-right text-xs text-slate-600">
                      <p className="mb-1"><a href="http://www.alpinkader.nrw" className="text-blue-600 underline">www.alpinkader.nrw</a></p>
-                     <p className="mb-4">✉ Info@alpinkader.nrw</p>
-                     <p className="text-black text-sm">{invoice.date}</p>
+                     <p className="mb-2">✉ Info@alpinkader.nrw</p>
+                     <p className="text-black text-sm font-medium">Rechnungsdatum: {invoice.date}</p>
+                     <p className="text-blue-800 text-xs font-semibold mb-2">Zahlungsziel: {dueDate} (14 Tage)</p>
                      <p className="text-black font-semibold text-sm">Beleg-Nr.: {invoice.invoiceNumber}</p>
                 </div>
              </div>
-             <h1 className="text-xl font-bold mb-4">Rechnung {invoice.invoiceNumber}</h1>
+             <h1 className="text-xl font-bold mb-4">Rechnung {invoice.invoiceNumber}: Sammelbestellung</h1>
              <p className="mb-4 text-sm">Ausrüstungsbestellung für den DAV Alpinkader NRW:</p>
              
              {/* Changed text-sm to text-xs for smaller table font */}
@@ -93,7 +105,7 @@ export const BulkInvoicePrint: React.FC<BulkInvoicePrintProps> = ({ invoice }) =
                 </tbody>
              </table>
              <div className="whitespace-pre-wrap text-[14px] leading-relaxed font-normal mb-8">
-                {BULK_ORDER_PAYMENT_TEXT}
+                {paymentText}
              </div>
              <div className="mt-auto pt-4 border-t border-slate-300 text-[8px] leading-tight text-slate-500">
                 {FOOTER_INFO.map((line, i) => (

@@ -7,7 +7,7 @@ import { PDFDownloadLink, pdf } from '@react-pdf/renderer';
 import { CertificateDocument } from '../components/pdf/CertificateDocument';
 import { CertificatePrint } from '../components/print/CertificatePrint';
 import { useToast } from '../components/Toast';
-import { generateUUID } from '../utils/formatting';
+import { generateUUID, formatDateDE } from '../utils/formatting';
 
 interface CertificatesProps {
   contacts: Contact[];
@@ -26,6 +26,7 @@ export const Certificates: React.FC<CertificatesProps> = ({ contacts }) => {
 
   const [formData, setFormData] = useState({
     title: 'Klettertechnik Fortgeschritten',
+    certificateDate: new Date().toISOString().split('T')[0],
     startDate: new Date().toISOString().split('T')[0],
     endDate: new Date().toISOString().split('T')[0],
     location: 'Kletterzentrum Köln',
@@ -104,6 +105,7 @@ export const Certificates: React.FC<CertificatesProps> = ({ contacts }) => {
     if (selectedContacts.length === 0) return;
     try {
       const allocated = await db.allocateDocumentNumbers(selectedContacts.length);
+      const certDate = formData.certificateDate || new Date().toISOString().split('T')[0];
       for (let i = 0; i < selectedContacts.length; i++) {
         const id = selectedContacts[i];
         const contact = contacts.find(c => c.id === id);
@@ -112,9 +114,9 @@ export const Certificates: React.FC<CertificatesProps> = ({ contacts }) => {
             id: generateUUID(),
             invoiceNumber: allocated[i],
             recipientName: `${contact.firstName} ${contact.lastName}`,
-            date: formData.startDate || new Date().toISOString().split('T')[0],
+            date: certDate,
             totalAmount: 0,
-            title: `Teilnahmebescheinigung: ${formData.title}`,
+            title: `Teilnahmebescheinigung ${allocated[i]}: ${formData.title}`,
             type: 'Certificate',
             deliveryMethod: 'download'
           });
@@ -157,13 +159,15 @@ export const Certificates: React.FC<CertificatesProps> = ({ contacts }) => {
                     reader.readAsDataURL(blob);
                 });
 
+                const certDate = formData.certificateDate || new Date().toISOString().split('T')[0];
+
                 const response = await fetch('/api/email/send', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({
                           to: contact.email,
-                          subject: `Teilnahmebescheinigung ${docNumber}: ${formData.title}`,
-                          text: `Hallo ${contact.firstName},\n\nanbei deine Teilnahmebescheinigung (Beleg-Nr. ${docNumber}) für den Lehrgang ${formData.title}.\n\nViele Grüße\nDAV Alpinkader NRW`,
+                          subject: `Teilnahmebescheinigung ${docNumber}: Lehrgang ${formData.title}`,
+                          text: `Hallo ${contact.firstName},\n\nanbei deine Teilnahmebescheinigung (Beleg-Nr. ${docNumber}) vom ${formatDateDE(certDate)} für den Lehrgang ${formData.title}.\n\nViele Grüße\nDAV Alpinkader NRW`,
                           filename: `Bescheinigung_${docNumber}_${contact.lastName}.pdf`,
                           pdfBase64: base64data
                       })
@@ -174,9 +178,9 @@ export const Certificates: React.FC<CertificatesProps> = ({ contacts }) => {
                       id: generateUUID(),
                       invoiceNumber: docNumber,
                       recipientName: `${contact.firstName} ${contact.lastName}`,
-                      date: formData.startDate || new Date().toISOString().split('T')[0],
+                      date: certDate,
                       totalAmount: 0,
-                      title: `Teilnahmebescheinigung: ${formData.title}`,
+                      title: `Teilnahmebescheinigung ${docNumber}: ${formData.title}`,
                       type: 'Certificate',
                       deliveryMethod: 'email'
                     });
@@ -201,6 +205,7 @@ export const Certificates: React.FC<CertificatesProps> = ({ contacts }) => {
     if (selectedContacts.length === 0) return;
     try {
       const allocated = await db.allocateDocumentNumbers(selectedContacts.length);
+      const certDate = formData.certificateDate || new Date().toISOString().split('T')[0];
       for (let i = 0; i < selectedContacts.length; i++) {
         const id = selectedContacts[i];
         const contact = contacts.find(c => c.id === id);
@@ -209,9 +214,9 @@ export const Certificates: React.FC<CertificatesProps> = ({ contacts }) => {
             id: generateUUID(),
             invoiceNumber: allocated[i],
             recipientName: `${contact.firstName} ${contact.lastName}`,
-            date: formData.startDate || new Date().toISOString().split('T')[0],
+            date: certDate,
             totalAmount: 0,
-            title: `Teilnahmebescheinigung: ${formData.title}`,
+            title: `Teilnahmebescheinigung ${allocated[i]}: ${formData.title}`,
             type: 'Certificate',
             deliveryMethod: 'download'
           });
@@ -251,6 +256,20 @@ export const Certificates: React.FC<CertificatesProps> = ({ contacts }) => {
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Lehrgangsbezeichnung</label>
                 <input type="text" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} className="w-full rounded-lg border-slate-300 border px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" />
+              </div>
+
+              {/* Bescheinigungsdatum (Ausstellungsdatum) */}
+              <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-lg space-y-1.5">
+                <label className="block text-sm font-semibold text-blue-950">Bescheinigungsdatum (Ausstellungsdatum)</label>
+                <div className="relative">
+                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-500 w-4 h-4" />
+                  <input 
+                    type="date" 
+                    value={formData.certificateDate} 
+                    onChange={e => setFormData({...formData, certificateDate: e.target.value})} 
+                    className="w-full rounded-lg border-blue-200 bg-white border pl-10 pr-3 py-2 text-sm font-medium focus:ring-2 focus:ring-blue-500 text-slate-800" 
+                  />
+                </div>
               </div>
               
               <div className="grid grid-cols-2 gap-4">
@@ -398,6 +417,7 @@ export const Certificates: React.FC<CertificatesProps> = ({ contacts }) => {
         settings={settings}
         formData={{
           title: formData.title,
+          certificateDate: formData.certificateDate,
           location: formData.location,
           date: formData.startDate,
           text: formData.text

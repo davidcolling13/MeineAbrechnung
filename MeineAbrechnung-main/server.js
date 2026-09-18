@@ -67,6 +67,7 @@ try {
       invoiceNumber TEXT,
       recipientName TEXT,
       date TEXT,
+      dueDate TEXT,
       totalAmount REAL,
       title TEXT,
       type TEXT,
@@ -106,6 +107,11 @@ try {
     if (!hasDeliveryMethod) {
         console.log("Migration: Füge Spalte 'deliveryMethod' zur Tabelle 'invoices' hinzu...");
         db.prepare("ALTER TABLE invoices ADD COLUMN deliveryMethod TEXT DEFAULT 'download'").run();
+    }
+    const hasDueDate = tableInfo.some(col => col.name === 'dueDate');
+    if (!hasDueDate) {
+        console.log("Migration: Füge Spalte 'dueDate' zur Tabelle 'invoices' hinzu...");
+        db.prepare("ALTER TABLE invoices ADD COLUMN dueDate TEXT").run();
     }
   } catch (e) {
       console.error("Fehler bei Datenbank-Migration (Invoices):", e);
@@ -234,6 +240,7 @@ const InvoiceSchema = z.object({
   invoiceNumber: z.string(),
   recipientName: z.string(),
   date: z.string(),
+  dueDate: z.string().optional(),
   totalAmount: z.number(),
   title: z.string(),
   type: z.enum(['Training', 'BulkOrder', 'Certificate']),
@@ -393,7 +400,21 @@ app.get('/api/invoices', (req, res) => {
     try {
         const stmt = db.prepare('SELECT * FROM invoices ORDER BY date DESC, createdAt DESC');
         const rows = stmt.all();
-        res.json(rows);
+        const enriched = rows.map(row => {
+            if (!row.dueDate && row.date) {
+                const parts = row.date.split('T')[0].split('-');
+                if (parts.length === 3) {
+                    const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+                    d.setDate(d.getDate() + 14);
+                    return {
+                        ...row,
+                        dueDate: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+                    };
+                }
+            }
+            return row;
+        });
+        res.json(enriched);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -405,14 +426,22 @@ app.post('/api/invoices', (req, res) => {
         if (!validation.success) {
              return res.status(400).json({ error: validation.error.errors.map(e => e.message).join(', ') });
         }
-        const { id, invoiceNumber, recipientName, date, totalAmount, title, type, deliveryMethod } = validation.data;
+        let { id, invoiceNumber, recipientName, date, dueDate, totalAmount, title, type, deliveryMethod } = validation.data;
+        if (!dueDate && date) {
+            const parts = date.split('T')[0].split('-');
+            if (parts.length === 3) {
+                const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+                d.setDate(d.getDate() + 14);
+                dueDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+            }
+        }
         const stmt = db.prepare(`
-            INSERT OR REPLACE INTO invoices (id, invoiceNumber, recipientName, date, totalAmount, title, type, deliveryMethod)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT OR REPLACE INTO invoices (id, invoiceNumber, recipientName, date, dueDate, totalAmount, title, type, deliveryMethod)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         `);
         const finalId = id || crypto.randomUUID();
-        stmt.run(finalId, invoiceNumber, recipientName, date, totalAmount, title, type, deliveryMethod);
-        logEvent('INFO', 'Rechnungen', `Dokument archiviert: ${invoiceNumber} für ${recipientName} (${type}, ${deliveryMethod || 'download'})`);
+        stmt.run(finalId, invoiceNumber, recipientName, date, dueDate || null, totalAmount, title, type, deliveryMethod);
+        logEvent('INFO', 'Rechnungen', `Dokument archiviert: ${invoiceNumber} für ${recipientName} (${type}, ${deliveryMethod || 'download'}, Fälligkeit: ${dueDate || '14 Tage'})`);
         res.json({ success: true, id: finalId });
     } catch (error) {
         logEvent('ERROR', 'Rechnungen', `Fehler beim Archivieren: ${error.message}`);
@@ -427,13 +456,21 @@ app.put('/api/invoices/:id', (req, res) => {
         if (!validation.success) {
              return res.status(400).json({ error: validation.error.errors.map(e => e.message).join(', ') });
         }
-        const { invoiceNumber, recipientName, date, totalAmount, title, type, deliveryMethod } = validation.data;
+        let { invoiceNumber, recipientName, date, dueDate, totalAmount, title, type, deliveryMethod } = validation.data;
+        if (!dueDate && date) {
+            const parts = date.split('T')[0].split('-');
+            if (parts.length === 3) {
+                const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+                d.setDate(d.getDate() + 14);
+                dueDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+            }
+        }
         const stmt = db.prepare(`
             UPDATE invoices 
-            SET invoiceNumber = ?, recipientName = ?, date = ?, totalAmount = ?, title = ?, type = ?, deliveryMethod = ?
+            SET invoiceNumber = ?, recipientName = ?, date = ?, dueDate = ?, totalAmount = ?, title = ?, type = ?, deliveryMethod = ?
             WHERE id = ?
         `);
-        const info = stmt.run(invoiceNumber, recipientName, date, totalAmount, title, type, deliveryMethod, id);
+        const info = stmt.run(invoiceNumber, recipientName, date, dueDate || null, totalAmount, title, type, deliveryMethod, id);
         if (info.changes === 0) return res.status(404).json({ error: "Rechnung nicht gefunden" });
         logEvent('INFO', 'Rechnungen', `Dokument aktualisiert: ${invoiceNumber} (${id})`);
         res.json({ success: true });

@@ -2,6 +2,7 @@ import React from 'react';
 import { Document, Page, Text, View, Image } from '@react-pdf/renderer';
 import { Contact, AppSettings } from '../../types';
 import { pdfStyles } from './SharedStyles';
+import { formatDateDE } from '../../utils/formatting';
 
 export interface ContactWithInvoice {
   contact: Contact;
@@ -14,6 +15,7 @@ interface CertificateDocumentProps {
   settings: AppSettings;
   formData: {
     title: string;
+    certificateDate?: string;
     location: string;
     startDate: string;
     endDate: string;
@@ -34,6 +36,9 @@ export const CertificateDocument: React.FC<CertificateDocumentProps> = ({
     invoiceNumber: ''
   }));
 
+  const certDateStr = formData.certificateDate || new Date().toISOString().split('T')[0];
+  const certDateFormatted = formatDateDE(certDateStr);
+
   const getSalutation = (c: Contact) => {
       if (c.gender === 'male') return `Lieber ${c.firstName},`;
       if (c.gender === 'female') return `Liebe ${c.firstName},`;
@@ -41,11 +46,11 @@ export const CertificateDocument: React.FC<CertificateDocumentProps> = ({
   };
 
   const getDateString = () => {
-    const start = new Date(formData.startDate).toLocaleDateString('de-DE');
+    const start = formatDateDE(formData.startDate);
     if (!formData.endDate || formData.startDate === formData.endDate) {
       return start;
     }
-    const end = new Date(formData.endDate).toLocaleDateString('de-DE');
+    const end = formatDateDE(formData.endDate);
     return `${start} bis ${end}`;
   };
 
@@ -54,6 +59,8 @@ export const CertificateDocument: React.FC<CertificateDocumentProps> = ({
       .replace(/{Titel}/g, formData.title)
       .replace(/{Ort}/g, formData.location)
       .replace(/{Datum}/g, getDateString())
+      .replace(/{Bescheinigungsdatum}/g, certDateFormatted)
+      .replace(/{Ausstellungsdatum}/g, certDateFormatted)
       .replace(/{Belegnummer}/g, invNum)
       .replace(/{Nummer}/g, invNum);
   };
@@ -78,13 +85,15 @@ export const CertificateDocument: React.FC<CertificateDocumentProps> = ({
           <View style={pdfStyles.metaBlock}>
             <Text>www.alpinkader.nrw</Text>
             <Text>Info@alpinkader.nrw</Text>
-            <Text style={{ marginTop: 8, color: '#000' }}>Datum: {new Date().toLocaleDateString('de-DE')}</Text>
+            <Text style={{ marginTop: 8, color: '#000' }}>Datum: {certDateFormatted}</Text>
             {invoiceNumber ? (
               <Text style={{ marginTop: 4, fontFamily: 'Helvetica-Bold', color: '#000' }}>Beleg-Nr.: {invoiceNumber}</Text>
             ) : null}
           </View>
 
-          <Text style={[pdfStyles.title, { fontSize: 24, marginTop: 20, marginBottom: 6 }]}>Teilnahmebescheinigung</Text>
+          <Text style={[pdfStyles.title, { fontSize: 20, marginTop: 20, marginBottom: 6 }]}>
+            {invoiceNumber ? `Teilnahmebescheinigung ${invoiceNumber}: ${formData.title}` : `Teilnahmebescheinigung: ${formData.title}`}
+          </Text>
           {invoiceNumber ? (
             <Text style={{ fontSize: 10, color: '#475569', marginBottom: 20 }}>Bescheinigungs-Nr.: {invoiceNumber}</Text>
           ) : (

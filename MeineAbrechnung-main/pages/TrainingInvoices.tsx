@@ -5,7 +5,7 @@ import { useToast } from '../components/Toast';
 import { Printer, Euro, Calendar, Mail, Loader2, Download, Hash } from 'lucide-react';
 import { CardSkeleton } from '../components/Skeleton';
 import { TrainingInvoicePrint } from '../components/print/TrainingInvoicePrint';
-import { roundCurrency, generateUUID } from '../utils/formatting';
+import { roundCurrency, generateUUID, calculateDueDate, calculateDueDateISO, formatDateDE } from '../utils/formatting';
 import { PDFDownloadLink, pdf } from '@react-pdf/renderer';
 import { TrainingInvoiceDocument } from '../components/pdf/TrainingInvoiceDocument';
 
@@ -25,6 +25,7 @@ export const TrainingInvoices: React.FC<TrainingInvoicesProps> = ({ contacts }) 
 
   const [formData, setFormData] = useState({
     title: 'Alpinklettern 09/2025',
+    invoiceDate: new Date().toISOString().split('T')[0],
     startDate: new Date().toISOString().split('T')[0],
     endDate: new Date().toISOString().split('T')[0],
     location: 'Colico, Italien',
@@ -109,6 +110,8 @@ export const TrainingInvoices: React.FC<TrainingInvoicesProps> = ({ contacts }) 
       const allocated = await db.allocateDocumentNumbers(selectedContacts.length);
       
       // 2. Dokumente im Rechnungsbuch archivieren
+      const invDate = formData.invoiceDate || new Date().toISOString().split('T')[0];
+      const dueDate = calculateDueDateISO(invDate, 14);
       for (let i = 0; i < selectedContacts.length; i++) {
         const id = selectedContacts[i];
         const contact = contacts.find(c => c.id === id);
@@ -117,9 +120,10 @@ export const TrainingInvoices: React.FC<TrainingInvoicesProps> = ({ contacts }) 
             id: generateUUID(),
             invoiceNumber: allocated[i],
             recipientName: `${contact.firstName} ${contact.lastName}`,
-            date: formData.startDate || new Date().toISOString().split('T')[0],
+            date: invDate,
+            dueDate: dueDate,
             totalAmount: roundCurrency(formData.fee),
-            title: `Lehrgangsrechnung: ${formData.title}`,
+            title: `Rechnung ${allocated[i]}: ${formData.title}`,
             type: 'Training',
             deliveryMethod: 'download'
           });
@@ -165,13 +169,17 @@ export const TrainingInvoices: React.FC<TrainingInvoicesProps> = ({ contacts }) 
                     reader.readAsDataURL(blob);
                 });
 
+                const invDate = formData.invoiceDate || new Date().toISOString().split('T')[0];
+                const dueDateISO = calculateDueDateISO(invDate, 14);
+                const dueDateFormatted = calculateDueDate(invDate, 14);
+
                 const response = await fetch('/api/email/send', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({
                           to: contact.email,
-                          subject: `Rechnung ${invoiceNumber}: ${formData.title}`,
-                          text: `Hallo ${contact.firstName},\n\nanbei die Rechnung ${invoiceNumber} für den Lehrgang ${formData.title}.\n\nViele Grüße\nDAV Alpinkader NRW`,
+                          subject: `Rechnung ${invoiceNumber}: Lehrgang ${formData.title}`,
+                          text: `Hallo ${contact.firstName},\n\nanbei die Rechnung ${invoiceNumber} für den Lehrgang ${formData.title} mit Rechnungsdatum ${formatDateDE(invDate)} und Zahlungsziel bis zum ${dueDateFormatted} (14 Tage ab Rechnungsdatum).\n\nViele Grüße\nDAV Alpinkader NRW`,
                           filename: `Rechnung_${invoiceNumber}_${contact.lastName}.pdf`,
                           pdfBase64: base64data
                       })
@@ -182,9 +190,10 @@ export const TrainingInvoices: React.FC<TrainingInvoicesProps> = ({ contacts }) 
                         id: generateUUID(),
                         invoiceNumber: invoiceNumber,
                         recipientName: `${contact.firstName} ${contact.lastName}`,
-                        date: formData.startDate || new Date().toISOString().split('T')[0],
+                        date: invDate,
+                        dueDate: dueDateISO,
                         totalAmount: roundCurrency(formData.fee),
-                        title: `Lehrgangsrechnung: ${formData.title}`,
+                        title: `Rechnung ${invoiceNumber}: ${formData.title}`,
                         type: 'Training',
                         deliveryMethod: 'email'
                     });
@@ -209,6 +218,8 @@ export const TrainingInvoices: React.FC<TrainingInvoicesProps> = ({ contacts }) 
     if (selectedContacts.length === 0) return;
     try {
       const allocated = await db.allocateDocumentNumbers(selectedContacts.length);
+      const invDate = formData.invoiceDate || new Date().toISOString().split('T')[0];
+      const dueDate = calculateDueDateISO(invDate, 14);
       for (let i = 0; i < selectedContacts.length; i++) {
         const id = selectedContacts[i];
         const contact = contacts.find(c => c.id === id);
@@ -217,9 +228,10 @@ export const TrainingInvoices: React.FC<TrainingInvoicesProps> = ({ contacts }) 
             id: generateUUID(),
             invoiceNumber: allocated[i],
             recipientName: `${contact.firstName} ${contact.lastName}`,
-            date: formData.startDate || new Date().toISOString().split('T')[0],
+            date: invDate,
+            dueDate: dueDate,
             totalAmount: roundCurrency(formData.fee),
-            title: `Lehrgangsrechnung: ${formData.title}`,
+            title: `Rechnung ${allocated[i]}: ${formData.title}`,
             type: 'Training',
             deliveryMethod: 'download'
           });
@@ -261,6 +273,24 @@ export const TrainingInvoices: React.FC<TrainingInvoicesProps> = ({ contacts }) 
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Lehrgangsbezeichnung</label>
                 <input type="text" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} className="w-full rounded-lg border-slate-300 border px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" />
+              </div>
+
+              {/* Rechnungsdatum mit Zahlungszielanzeige */}
+              <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-lg space-y-1.5">
+                <label className="block text-sm font-semibold text-blue-950">Rechnungsdatum (Belegdatum)</label>
+                <div className="relative">
+                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-500 w-4 h-4" />
+                  <input 
+                    type="date" 
+                    value={formData.invoiceDate} 
+                    onChange={e => setFormData({...formData, invoiceDate: e.target.value})} 
+                    className="w-full rounded-lg border-blue-200 bg-white border pl-10 pr-3 py-2 text-sm font-medium focus:ring-2 focus:ring-blue-500 text-slate-800" 
+                  />
+                </div>
+                <div className="flex items-center justify-between text-xs text-blue-900 pt-0.5">
+                  <span>Zahlungsziel (14 Tage):</span>
+                  <span className="font-bold">{calculateDueDate(formData.invoiceDate, 14)}</span>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -421,6 +451,7 @@ export const TrainingInvoices: React.FC<TrainingInvoicesProps> = ({ contacts }) 
         settings={settings}
         formData={{
           title: formData.title,
+          invoiceDate: formData.invoiceDate,
           location: formData.location,
           date: formData.startDate,
           fee: formData.fee,

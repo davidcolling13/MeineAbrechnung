@@ -8,7 +8,7 @@ Verwendungszweck: "Alpinkader Lehrgang {Titel} + dein Vor- und Nachname"
 
 Dieses Schreiben gilt auch als Lehrgangsbestätigung für deine Sektion.`;
 
-export const BULK_ORDER_PAYMENT_TEXT = `Zahlung innerhalb der nächsten 14 Tage an folgende Bankverbindung:
+export const BULK_ORDER_PAYMENT_TEXT = `Zahlung innerhalb von 14 Tagen (Zahlungsziel: {Frist}) an folgende Bankverbindung:
 
 Landesverband Nordrhein-Westfalen des Deutschen Alpenvereins e.V.
 IBAN: DE39 3005 0110 0010 1656 94, BIC: DUSSDEDDXXX

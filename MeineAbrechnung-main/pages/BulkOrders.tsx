@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Contact, AppSettings } from '../types';
-import { Upload, Check, Printer, Mail, AlertCircle, Edit2, Download, Loader2, X, Send, Paperclip } from 'lucide-react';
+import { Upload, Check, Printer, Mail, AlertCircle, Edit2, Download, Loader2, X, Send, Paperclip, Calendar } from 'lucide-react';
 import { db } from '../services/db';
 import { useToast } from '../components/Toast';
 import { parseBulkOrderExcel, GeneratedInvoiceData } from '../services/excelParser';
-import { roundCurrency } from '../utils/formatting';
+import { roundCurrency, calculateDueDate, calculateDueDateISO, formatDateDE } from '../utils/formatting';
 import { PDFDownloadLink, pdf } from '@react-pdf/renderer';
 import { BulkInvoiceDocument } from '../components/pdf/BulkInvoiceDocument';
 import { CardSkeleton } from '../components/Skeleton';
@@ -19,6 +19,7 @@ export const BulkOrders: React.FC<BulkOrdersProps> = ({ contacts }) => {
   const [generatedInvoices, setGeneratedInvoices] = useState<GeneratedInvoiceData[]>([]);
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [customInvoiceDate, setCustomInvoiceDate] = useState(new Date().toISOString().split('T')[0]);
   
   // Configuration
   const [unmatchedNames, setUnmatchedNames] = useState<string[]>([]);
@@ -61,7 +62,7 @@ export const BulkOrders: React.FC<BulkOrdersProps> = ({ contacts }) => {
   const processFile = async (file: File) => {
     setErrorMsg(null);
     try {
-        const result = await parseBulkOrderExcel(file, contacts);
+        const result = await parseBulkOrderExcel(file, contacts, customInvoiceDate);
         setUnmatchedNames(result.unmatchedNames);
         setGeneratedInvoices(result.invoices);
         setStep(2);
@@ -69,6 +70,17 @@ export const BulkOrders: React.FC<BulkOrdersProps> = ({ contacts }) => {
         console.error("Error parsing Excel:", error);
         setErrorMsg(error.message || "Fehler beim Lesen der Datei.");
     }
+  };
+
+  const handleGlobalDateChange = (newDate: string) => {
+    setCustomInvoiceDate(newDate);
+    setGeneratedInvoices(prev => prev.map(inv => ({
+      ...inv,
+      date: formatDateDE(newDate),
+      isoDate: newDate,
+      dueDate: calculateDueDate(newDate, 14),
+      dueDateISO: calculateDueDateISO(newDate, 14)
+    })));
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -108,8 +120,9 @@ export const BulkOrders: React.FC<BulkOrdersProps> = ({ contacts }) => {
             invoiceNumber: inv.invoiceNumber,
             recipientName: `${inv.contact.firstName} ${inv.contact.lastName}`,
             date: inv.isoDate, 
+            dueDate: inv.dueDateISO || calculateDueDateISO(inv.isoDate, 14),
             totalAmount: inv.total,
-            title: `Sammelbestellung ${inv.invoiceNumber}`,
+            title: `Rechnung ${inv.invoiceNumber}: Sammelbestellung`,
             type: 'BulkOrder',
             deliveryMethod: method
         });
@@ -144,8 +157,9 @@ export const BulkOrders: React.FC<BulkOrdersProps> = ({ contacts }) => {
   // 1. Öffnet das Modal und setzt die Standardwerte
   const openEmailPreview = (inv: GeneratedInvoiceData) => {
       setPreviewInvoice(inv);
+      const dueFormatted = inv.dueDate || calculateDueDate(inv.isoDate, 14);
       setPreviewSubject(`Rechnung ${inv.invoiceNumber} - DAV Alpinkader NRW`);
-      setPreviewMessage(`Hallo ${inv.contact.firstName},\n\nanbei deine Rechnung über ${inv.total.toFixed(2)}€.\n\nViele Grüße\nDAV Alpinkader NRW`);
+      setPreviewMessage(`Hallo ${inv.contact.firstName},\n\nanbei deine Rechnung ${inv.invoiceNumber} über ${inv.total.toFixed(2)}€ vom ${inv.date || formatDateDE(inv.isoDate)} mit einem Zahlungsziel von 14 Tagen (fällig am ${dueFormatted}).\n\nViele Grüße\nDAV Alpinkader NRW`);
       setIsSending(false);
   };
 
@@ -214,7 +228,24 @@ export const BulkOrders: React.FC<BulkOrdersProps> = ({ contacts }) => {
       )}
 
       {step === 1 && (
-        <div className="max-w-xl mx-auto mt-8">
+        <div className="max-w-xl mx-auto mt-6 space-y-4">
+          <div className="bg-white p-4 rounded-xl border border-blue-200 shadow-sm space-y-2">
+            <label className="block text-sm font-semibold text-slate-800">Rechnungsdatum festlegen</label>
+            <div className="relative">
+              <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-500 w-4 h-4" />
+              <input 
+                type="date" 
+                value={customInvoiceDate} 
+                onChange={e => setCustomInvoiceDate(e.target.value)} 
+                className="w-full rounded-lg border-blue-200 bg-white border pl-10 pr-3 py-2 text-sm font-medium focus:ring-2 focus:ring-blue-500 text-slate-800" 
+              />
+            </div>
+            <div className="flex items-center justify-between text-xs text-slate-500 pt-1">
+              <span>Zahlungsziel (14 Tage):</span>
+              <span className="font-bold text-blue-700">{calculateDueDate(customInvoiceDate, 14)}</span>
+            </div>
+          </div>
+
           <div 
             className={`border-2 border-dashed rounded-xl p-10 text-center transition-colors ${dragActive ? 'border-blue-500 bg-blue-50' : 'border-slate-300 bg-white'}`}
             onDragEnter={handleDrag}
@@ -259,9 +290,21 @@ export const BulkOrders: React.FC<BulkOrdersProps> = ({ contacts }) => {
                   <p className="text-slate-500 text-sm">Versandkosten können unten individuell angepasst werden.</p>
                 </div>
              </div>
-             <button onClick={() => setStep(1)} className="text-slate-500 hover:text-slate-700 text-sm bg-white px-4 py-2 border rounded-lg">
-               Neuer Import
-             </button>
+             <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 bg-blue-50/70 border border-blue-200 px-3 py-1.5 rounded-lg text-sm">
+                  <Calendar className="w-4 h-4 text-blue-600" />
+                  <span className="text-xs font-semibold text-blue-950">Rechnungsdatum:</span>
+                  <input 
+                    type="date"
+                    value={customInvoiceDate}
+                    onChange={e => handleGlobalDateChange(e.target.value)}
+                    className="bg-white border border-blue-200 text-slate-800 text-xs rounded px-2 py-1 font-medium focus:ring-1 focus:ring-blue-500 outline-none"
+                  />
+                </div>
+                <button onClick={() => setStep(1)} className="text-slate-500 hover:text-slate-700 text-sm bg-white px-4 py-2 border rounded-lg">
+                  Neuer Import
+                </button>
+             </div>
           </div>
 
           {unmatchedNames.length > 0 && (
@@ -324,6 +367,10 @@ export const BulkOrders: React.FC<BulkOrdersProps> = ({ contacts }) => {
                     <div className="flex justify-between items-center">
                         <span className="text-slate-400 text-xs">Gesamtbetrag:</span>
                         <span className="font-bold text-slate-900 text-lg">{inv.total.toFixed(2)} €</span>
+                    </div>
+                    <div className="flex justify-between items-center text-xs text-slate-500 pt-2 border-t border-dashed border-slate-200 mt-2">
+                        <span>Datum: {inv.date}</span>
+                        <span className="text-blue-700 font-medium">Zahlungsziel: {inv.dueDate || calculateDueDate(inv.isoDate, 14)}</span>
                     </div>
                   </div>
                 </div>

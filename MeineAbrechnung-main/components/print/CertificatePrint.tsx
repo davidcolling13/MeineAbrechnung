@@ -1,5 +1,6 @@
 import React from 'react';
 import { Contact, AppSettings } from '../../types';
+import { formatDateDE } from '../../utils/formatting';
 
 interface CertificatePrintProps {
   contacts: Contact[];
@@ -7,6 +8,7 @@ interface CertificatePrintProps {
   settings: AppSettings;
   formData: {
     title: string;
+    certificateDate?: string;
     location: string;
     date: string;
     text: string;
@@ -21,6 +23,8 @@ export const CertificatePrint: React.FC<CertificatePrintProps> = ({
   formData,
   invoiceNumbers
 }) => {
+  const certDateStr = formData.certificateDate || formData.date || new Date().toISOString().split('T')[0];
+  const certDateFormatted = formatDateDE(certDateStr);
   
   const getSalutation = (contact: Contact) => {
     if (contact.gender === 'male') return `Lieber ${contact.firstName},`;
@@ -32,7 +36,9 @@ export const CertificatePrint: React.FC<CertificatePrintProps> = ({
     return text
       .replace(/{Titel}/g, formData.title)
       .replace(/{Ort}/g, formData.location)
-      .replace(/{Datum}/g, new Date(formData.date).toLocaleDateString('de-DE'))
+      .replace(/{Datum}/g, formatDateDE(formData.date))
+      .replace(/{Bescheinigungsdatum}/g, certDateFormatted)
+      .replace(/{Ausstellungsdatum}/g, certDateFormatted)
       .replace(/{Belegnummer}/g, invNum)
       .replace(/{Nummer}/g, invNum);
   };
@@ -66,12 +72,14 @@ export const CertificatePrint: React.FC<CertificatePrintProps> = ({
                 <div className="text-right text-xs text-slate-600">
                      <p className="mb-1"><a href="http://www.alpinkader.nrw" className="text-blue-600 underline">www.alpinkader.nrw</a></p>
                      <p className="mb-4">✉ Info@alpinkader.nrw</p>
-                     <p className="text-black text-sm">{new Date().toISOString().split('T')[0]}</p>
+                     <p className="text-black text-sm">Datum: {certDateFormatted}</p>
                      {invNum && <p className="text-black font-semibold text-sm">Beleg-Nr.: {invNum}</p>}
                 </div>
              </div>
 
-             <h2 className="text-2xl font-bold mb-1">Teilnahmebescheinigung</h2>
+             <h2 className="text-2xl font-bold mb-1">
+               {invNum ? `Teilnahmebescheinigung ${invNum}: ${formData.title}` : `Teilnahmebescheinigung: ${formData.title}`}
+             </h2>
              {invNum ? (
                <p className="text-sm text-slate-600 mb-6">Bescheinigungs-Nr.: {invNum}</p>
              ) : (

@@ -1,5 +1,6 @@
 import React from 'react';
 import { Contact, AppSettings } from '../../types';
+import { calculateDueDate, formatDateDE } from '../../utils/formatting';
 
 interface TrainingInvoicePrintProps {
   contacts: Contact[];
@@ -7,6 +8,7 @@ interface TrainingInvoicePrintProps {
   settings: AppSettings;
   formData: {
     title: string;
+    invoiceDate?: string;
     location: string;
     date: string;
     fee: number;
@@ -22,12 +24,9 @@ export const TrainingInvoicePrint: React.FC<TrainingInvoicePrintProps> = ({
   formData,
   invoiceNumbers
 }) => {
-  
-  const getPaymentDeadline = (dateStr: string) => {
-    const date = new Date(dateStr);
-    date.setDate(date.getDate() + 14); 
-    return date.toLocaleDateString('de-DE');
-  };
+  const invoiceDateStr = formData.invoiceDate || new Date().toISOString().split('T')[0];
+  const dueDateFormatted = calculateDueDate(invoiceDateStr, 14);
+  const invoiceDateFormatted = formatDateDE(invoiceDateStr);
 
   const getSalutation = (contact: Contact) => {
       if (contact.gender === 'male') return `Lieber ${contact.firstName},`;
@@ -39,9 +38,11 @@ export const TrainingInvoicePrint: React.FC<TrainingInvoicePrintProps> = ({
     return text
       .replace(/{Titel}/g, formData.title)
       .replace(/{Ort}/g, formData.location)
-      .replace(/{Datum}/g, new Date(formData.date).toLocaleDateString('de-DE'))
+      .replace(/{Datum}/g, formatDateDE(formData.date))
       .replace(/{Gebühr}/g, formData.fee.toFixed(2))
-      .replace(/{Frist}/g, getPaymentDeadline(formData.date))
+      .replace(/{Frist}/g, dueDateFormatted)
+      .replace(/{Zahlungsziel}/g, dueDateFormatted)
+      .replace(/{Rechnungsdatum}/g, invoiceDateFormatted)
       .replace(/{Belegnummer}/g, invNum)
       .replace(/{Nummer}/g, invNum);
   };
@@ -74,13 +75,14 @@ export const TrainingInvoicePrint: React.FC<TrainingInvoicePrintProps> = ({
 
                 <div className="text-right text-xs text-slate-600">
                      <p className="mb-1"><a href="http://www.alpinkader.nrw" className="text-blue-600 underline">www.alpinkader.nrw</a></p>
-                     <p className="mb-4">✉ Info@alpinkader.nrw</p>
-                     <p className="text-black text-sm">{new Date().toISOString().split('T')[0]}</p>
+                     <p className="mb-2">✉ Info@alpinkader.nrw</p>
+                     <p className="text-black text-sm font-medium">Rechnungsdatum: {invoiceDateFormatted}</p>
+                     <p className="text-blue-800 text-xs font-semibold mb-2">Zahlungsziel: {dueDateFormatted} (14 Tage)</p>
                      {invNum && <p className="text-black font-semibold text-sm">Beleg-Nr.: {invNum}</p>}
                 </div>
              </div>
 
-             <h1 className="text-xl font-bold mb-8">Rechnung Lehrgang: {formData.title}</h1>
+             <h1 className="text-xl font-bold mb-8">{invNum ? `Rechnung ${invNum}: Lehrgang ${formData.title}` : `Rechnung Lehrgang: ${formData.title}`}</h1>
              <p className="mb-6">{getSalutation(contact)}</p>
              <div className="whitespace-pre-wrap text-[15px] leading-relaxed font-normal mb-8">
                 {replacePlaceholders(formData.text, contact, invNum)}

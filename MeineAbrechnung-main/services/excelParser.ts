@@ -1,5 +1,5 @@
 import { Contact, BulkOrderItem } from '../types';
-import { roundCurrency, parseGermanFloat } from '../utils/formatting';
+import { roundCurrency, parseGermanFloat, calculateDueDate, calculateDueDateISO, formatDateDE } from '../utils/formatting';
 // @ts-ignore
 import readXlsxFile from 'read-excel-file';
 import { db } from './db';
@@ -18,6 +18,8 @@ export interface GeneratedInvoiceData {
   total: number;
   date: string;
   isoDate: string;
+  dueDate: string;
+  dueDateISO: string;
 }
 
 const findColumnIndex = (headerRow: any[], possibleNames: string[]): number => {
@@ -50,7 +52,7 @@ const findContact = (nameFromExcel: string, contacts: Contact[]): Contact | unde
   });
 };
 
-export const parseBulkOrderExcel = async (file: File, contacts: Contact[], startInvoiceNumber?: string): Promise<ParseResult> => {
+export const parseBulkOrderExcel = async (file: File, contacts: Contact[], customDate?: string): Promise<ParseResult> => {
   const rows = await readXlsxFile(file);
   
   if (!rows || rows.length < 2) {
@@ -139,9 +141,10 @@ export const parseBulkOrderExcel = async (file: File, contacts: Contact[], start
       ? await db.allocateDocumentNumbers(matchedOrders.length)
       : [];
 
-  const now = new Date();
-  const displayDate = now.toLocaleDateString('de-DE');
-  const isoDate = now.toISOString().split('T')[0];
+  const isoDate = customDate || new Date().toISOString().split('T')[0];
+  const displayDate = formatDateDE(isoDate);
+  const dueDateFormatted = calculateDueDate(isoDate, 14);
+  const dueDateISO = calculateDueDateISO(isoDate, 14);
   const newInvoices: GeneratedInvoiceData[] = [];
 
   matchedOrders.forEach(({ contact, items, name }, idx) => {
@@ -159,7 +162,9 @@ export const parseBulkOrderExcel = async (file: File, contacts: Contact[], start
           shippingCost: finalShipping,
           total: finalTotal,
           date: displayDate,
-          isoDate: isoDate
+          isoDate: isoDate,
+          dueDate: dueDateFormatted,
+          dueDateISO: dueDateISO
       });
   });
 

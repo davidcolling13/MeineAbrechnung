@@ -5,6 +5,7 @@ import { TableRowSkeleton } from '../components/Skeleton';
 import { FileText, Search, Edit2, Check, X, Trash2, Award, Mail, Download, ChevronUp, ChevronDown, Filter } from 'lucide-react';
 import { useToast } from '../components/Toast';
 import { ConfirmationModal } from '../components/ConfirmationModal';
+import { calculateDueDate, calculateDueDateISO, formatDateDE } from '../utils/formatting';
 
 type SortKey = 'date' | 'recipientName' | 'invoiceNumber' | 'totalAmount';
 type FilterType = 'All' | 'Training' | 'BulkOrder' | 'Certificate';
@@ -248,16 +249,32 @@ export const InvoiceHistory: React.FC = () => {
                                     return (
                                         <tr key={inv.id} className="hover:bg-slate-50 transition-colors">
                                             {/* Date */}
-                                            <td className="px-6 py-4 text-slate-500">
+                                            <td className="px-6 py-4 text-slate-600">
                                                 {isEditing && editForm ? (
-                                                    <input 
-                                                        type="date" 
-                                                        value={editForm.date} 
-                                                        onChange={e => setEditForm({...editForm, date: e.target.value})}
-                                                        className="w-full px-2 py-1 border rounded focus:ring-1 focus:ring-blue-500 outline-none"
-                                                    />
+                                                    <div className="space-y-1">
+                                                        <input 
+                                                            type="date" 
+                                                            value={editForm.date} 
+                                                            onChange={e => {
+                                                                const newDate = e.target.value;
+                                                                const newDue = calculateDueDateISO(newDate, 14);
+                                                                setEditForm({...editForm, date: newDate, dueDate: newDue});
+                                                            }}
+                                                            className="w-full px-2 py-1 border rounded focus:ring-1 focus:ring-blue-500 outline-none text-xs"
+                                                        />
+                                                        <div className="text-[10px] text-slate-400">
+                                                            Ziel: {editForm.dueDate ? formatDateDE(editForm.dueDate) : calculateDueDate(editForm.date, 14)}
+                                                        </div>
+                                                    </div>
                                                 ) : (
-                                                    new Date(inv.date).toLocaleDateString('de-DE')
+                                                    <div>
+                                                        <div>{formatDateDE(inv.date)}</div>
+                                                        {inv.type !== 'Certificate' && (
+                                                            <div className="text-xs text-blue-600 font-medium" title="Zahlungsziel: 14 Tage ab Rechnungsdatum">
+                                                                Ziel: {inv.dueDate ? formatDateDE(inv.dueDate) : calculateDueDate(inv.date, 14)}
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                 )}
                                             </td>
 

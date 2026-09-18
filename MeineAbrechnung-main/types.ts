@@ -49,7 +49,8 @@ export interface InvoiceRecord {
   id: string;
   invoiceNumber: string; // z.B. "2024-001"
   recipientName: string;
-  date: string;
+  date: string; // Rechnungsdatum
+  dueDate?: string; // Fälligkeitsdatum / Zahlungsziel (14 Tage ab Rechnungsdatum)
   totalAmount: number;
   title: string;
   type: 'Training' | 'BulkOrder' | 'Certificate';

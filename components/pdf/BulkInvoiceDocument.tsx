@@ -4,6 +4,7 @@ import { GeneratedInvoiceData } from '../../services/excelParser';
 import { AppSettings } from '../../types';
 import { pdfStyles } from './SharedStyles';
 import { BULK_ORDER_PAYMENT_TEXT } from '../../constants';
+import { calculateDueDate } from '../../utils/formatting';
 
 interface BulkInvoiceDocumentProps {
   invoice: GeneratedInvoiceData;
@@ -12,6 +13,14 @@ interface BulkInvoiceDocumentProps {
 
 export const BulkInvoiceDocument: React.FC<BulkInvoiceDocumentProps> = ({ invoice, settings }) => {
   const baseUrl = window.location.origin;
+  const dueDateStr = invoice.dueDate || calculateDueDate(invoice.isoDate || invoice.date, 14);
+
+  const paymentText = (settings.bankDetails || BULK_ORDER_PAYMENT_TEXT)
+    .replace(/{Frist}/g, dueDateStr)
+    .replace(/{Zahlungsziel}/g, dueDateStr)
+    .replace(/{Rechnungsdatum}/g, invoice.date)
+    .replace(/{Belegnummer}/g, invoice.invoiceNumber)
+    .replace(/{Nummer}/g, invoice.invoiceNumber);
 
   return (
     <Document>
@@ -36,12 +45,13 @@ export const BulkInvoiceDocument: React.FC<BulkInvoiceDocumentProps> = ({ invoic
         <View style={pdfStyles.metaBlock}>
           <Text>www.alpinkader.nrw</Text>
           <Text>Info@alpinkader.nrw</Text>
-          <Text style={{ marginTop: 8, color: '#000' }}>Datum: {invoice.date}</Text>
+          <Text style={{ marginTop: 8, color: '#000' }}>Rechnungsdatum: {invoice.date}</Text>
+          <Text style={{ marginTop: 2, color: '#1e40af', fontFamily: 'Helvetica-Bold' }}>Zahlungsziel: {dueDateStr}</Text>
           <Text style={{ marginTop: 4, fontFamily: 'Helvetica-Bold', color: '#000' }}>Beleg-Nr.: {invoice.invoiceNumber}</Text>
         </View>
 
         {/* Title */}
-        <Text style={pdfStyles.title}>Rechnung {invoice.invoiceNumber}</Text>
+        <Text style={pdfStyles.title}>Rechnung {invoice.invoiceNumber}: Sammelbestellung</Text>
         <Text style={{ fontSize: 10, marginBottom: 15 }}>Ausrüstungsbestellung für den DAV Alpinkader NRW:</Text>
 
         {/* Table */}
@@ -86,7 +96,7 @@ export const BulkInvoiceDocument: React.FC<BulkInvoiceDocumentProps> = ({ invoic
         </View>
 
         {/* Payment Info */}
-        <Text style={[pdfStyles.text, { marginTop: 20 }]}>{settings.bankDetails || BULK_ORDER_PAYMENT_TEXT}</Text>
+        <Text style={[pdfStyles.text, { marginTop: 20 }]}>{paymentText}</Text>
 
         {/* Footer */}
         <View style={pdfStyles.footer}>
