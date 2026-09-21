@@ -69,18 +69,19 @@ export const pdfStyles = StyleSheet.create({
     flexDirection: 'row',
     borderBottomWidth: 1,
     borderBottomColor: '#000',
-    minHeight: 18, // Slightly reduced min height
-    alignItems: 'center',
+    minHeight: 18,
+    alignItems: 'stretch',
   },
   tableHeader: {
     backgroundColor: '#f1f5f9', // slate-100
     fontFamily: 'Helvetica-Bold',
   },
   tableCell: {
-    padding: 2, // Reduced padding for compactness
-    fontSize: 9, // Explicitly 9pt
+    padding: 3,
+    fontSize: 8.5,
     borderRightWidth: 1,
     borderRightColor: '#000',
+    justifyContent: 'center',
   },
   tableCellLast: {
     borderRightWidth: 0,

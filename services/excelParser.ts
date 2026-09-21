@@ -22,16 +22,41 @@ export interface GeneratedInvoiceData {
   dueDateISO: string;
 }
 
-const findColumnIndex = (headerRow: any[], possibleNames: string[]): number => {
-  let idx = headerRow.findIndex(cell => 
-      cell && typeof cell === 'string' && possibleNames.some(name => cell.toLowerCase().trim() === name.toLowerCase())
+const findColumnIndex = (
+  headerRow: any[], 
+  exactMatches: string[], 
+  fuzzyMatches: string[] = [], 
+  excludeMatches: string[] = []
+): number => {
+  const cleanCells = headerRow.map(cell => 
+    cell !== null && cell !== undefined ? cell.toString().toLowerCase().trim() : ''
   );
-  if (idx === -1) {
-      idx = headerRow.findIndex(cell => 
-          cell && typeof cell === 'string' && possibleNames.some(name => cell.toLowerCase().includes(name.toLowerCase()))
-      );
+
+  // 1. Exact match against exactMatches
+  let idx = cleanCells.findIndex(cell => 
+    cell && exactMatches.some(m => cell === m.toLowerCase())
+  );
+  if (idx !== -1) return idx;
+
+  // 2. Fuzzy match without excluded words
+  if (fuzzyMatches.length > 0) {
+    idx = cleanCells.findIndex(cell => {
+      if (!cell) return false;
+      const hasExclude = excludeMatches.some(ex => cell.includes(ex.toLowerCase()));
+      if (hasExclude) return false;
+      return fuzzyMatches.some(m => cell.includes(m.toLowerCase()));
+    });
+    if (idx !== -1) return idx;
   }
-  return idx;
+
+  // 3. Fallback fuzzy match if no exclusions specified
+  if (fuzzyMatches.length > 0 && excludeMatches.length === 0) {
+    return cleanCells.findIndex(cell => 
+      cell && fuzzyMatches.some(m => cell.includes(m.toLowerCase()))
+    );
+  }
+
+  return -1;
 };
 
 const findContact = (nameFromExcel: string, contacts: Contact[]): Contact | undefined => {
@@ -62,16 +87,83 @@ export const parseBulkOrderExcel = async (file: File, contacts: Contact[], custo
   const headerRow = rows[0];
   
   const idxMap = {
-      articleNo: findColumnIndex(headerRow, ['art', 'nr', 'nummer', 'artikelnummer']),
-      name: findColumnIndex(headerRow, ['artikel', 'bezeichnung', 'produkt']),
-      size: findColumnIndex(headerRow, ['größe', 'size', 'groesse']),
-      color: findColumnIndex(headerRow, ['farbe', 'color']),
-      quantity: findColumnIndex(headerRow, ['menge', 'anzahl', 'stk']),
-      price: findColumnIndex(headerRow, ['preis', 'einzel', 'einzelpreis']),
-      person: findColumnIndex(headerRow, ['besteller', 'person', 'athlet', 'trainer', 'empfänger', 'wer']),
-      status: findColumnIndex(headerRow, ['status', 'lieferung']),
-      shipping: findColumnIndex(headerRow, ['versand', 'shipping', 'porto', 'versandkosten'])
+      articleNo: findColumnIndex(
+          headerRow,
+          ['art-nr', 'art.-nr.', 'art.-nr', 'artikelnr', 'artikel-nr', 'artikel-nr.', 'artikelnummer', 'artikel-nummer', 'art.nr', 'art.nr.', 'art nr', 'artnr', 'art_nr', 'sku', 'art-no', 'item-no'],
+          ['artikelnr', 'artikelnummer', 'art-nr', 'art.-nr', 'art.nr', 'art nr', 'artnr', 'sku'],
+          ['name', 'bezeichnung', 'beschreibung', 'titel']
+      ),
+      name: findColumnIndex(
+          headerRow,
+          ['artikel', 'artikelname', 'artikel-name', 'bezeichnung', 'artikelbezeichnung', 'produkt', 'produktname', 'produktbezeichnung', 'modell', 'modellname', 'beschreibung', 'artikelbeschreibung', 'ware', 'warenbezeichnung', 'titel', 'gegenstand', 'item', 'item name'],
+          ['artikelname', 'artikelbezeichnung', 'bezeichnung', 'produktname', 'produktbezeichnung', 'modell', 'beschreibung', 'titel', 'ware', 'produkt', 'artikel'],
+          ['nr', 'nummer', 'sku', 'code', 'art.-nr', 'art-nr', 'art.nr', 'artnr']
+      ),
+      size: findColumnIndex(
+          headerRow,
+          ['größe', 'size', 'groesse', 'größe (eu)', 'groesse (eu)'],
+          ['größe', 'groesse', 'size'],
+          []
+      ),
+      color: findColumnIndex(
+          headerRow,
+          ['farbe', 'color', 'farbbezeichnung', 'colour'],
+          ['farbe', 'color'],
+          []
+      ),
+      quantity: findColumnIndex(
+          headerRow,
+          ['menge', 'anzahl', 'stk', 'stück', 'stueck', 'qty', 'quantity'],
+          ['menge', 'anzahl', 'stk', 'stück'],
+          []
+      ),
+      price: findColumnIndex(
+          headerRow,
+          ['preis', 'einzel', 'einzelpreis', 'preis einzel', 'preis/stk', 'vk', 'ek', 'price', 'betrag'],
+          ['preis', 'einzel', 'price'],
+          ['gesamt', 'total', 'summe']
+      ),
+      person: findColumnIndex(
+          headerRow,
+          ['besteller', 'person', 'athlet', 'trainer', 'empfänger', 'wer', 'kaderathlet', 'kader', 'bestellt von', 'name des bestellers', 'name'],
+          ['besteller', 'athlet', 'trainer', 'empfänger', 'kader', 'bestell'],
+          []
+      ),
+      status: findColumnIndex(
+          headerRow,
+          ['status', 'lieferung', 'lieferstatus', 'bemerkung', 'info'],
+          ['status', 'lieferung', 'lieferstatus'],
+          []
+      ),
+      shipping: findColumnIndex(
+          headerRow,
+          ['versand', 'shipping', 'porto', 'versandkosten', 'fracht', 'versand & verpackung'],
+          ['versand', 'porto', 'shipping', 'fracht'],
+          []
+      )
   };
+
+  // Disambiguate articleNo and name if both pointed to the same column
+  if (idxMap.articleNo !== -1 && idxMap.articleNo === idxMap.name) {
+      const colStr = headerRow[idxMap.articleNo]?.toString().toLowerCase().trim() || '';
+      const looksLikeNumberCol = ['nr', 'nummer', 'art', 'sku', 'code'].some(k => colStr.includes(k));
+      if (looksLikeNumberCol) {
+          const otherCol = headerRow.findIndex((cell, i) => {
+              if (i === idxMap.articleNo || !cell) return false;
+              const str = cell.toString().toLowerCase().trim();
+              return ['artikel', 'bezeichnung', 'name', 'produkt', 'modell', 'beschreibung'].some(k => str.includes(k)) &&
+                     !['nr', 'nummer', 'sku', 'code'].some(k => str.includes(k));
+          });
+          idxMap.name = otherCol;
+      } else {
+          const otherCol = headerRow.findIndex((cell, i) => {
+              if (i === idxMap.name || !cell) return false;
+              const str = cell.toString().toLowerCase().trim();
+              return ['nr', 'nummer', 'art', 'sku', 'code'].some(k => str.includes(k));
+          });
+          idxMap.articleNo = otherCol;
+      }
+  }
 
   if (idxMap.person === -1 || idxMap.price === -1 || idxMap.quantity === -1) {
        throw new Error("Konnte notwendige Spalten (Besteller/Person, Preis oder Menge) nicht automatisch erkennen.");
@@ -90,8 +182,28 @@ export const parseBulkOrderExcel = async (file: File, contacts: Contact[], custo
 
       if (!personName || status.includes('nachlieferung')) return;
 
-      const articleNo = (idxMap.articleNo > -1 ? row[idxMap.articleNo] : '')?.toString() || '';
-      const articleName = (idxMap.name > -1 ? row[idxMap.name] : '')?.toString() || 'Unbekannter Artikel';
+      let articleNo = (idxMap.articleNo > -1 ? row[idxMap.articleNo] : '')?.toString().trim() || '';
+      let articleName = (idxMap.name > -1 ? row[idxMap.name] : '')?.toString().trim() || '';
+
+      // If articleName is empty or identical to articleNo, check other columns for descriptive text
+      if (!articleName || articleName === articleNo) {
+          const ignoredCols = new Set([
+              idxMap.articleNo, idxMap.size, idxMap.color, idxMap.quantity, 
+              idxMap.price, idxMap.person, idxMap.status, idxMap.shipping
+          ]);
+          for (let colIdx = 0; colIdx < row.length; colIdx++) {
+              if (ignoredCols.has(colIdx)) continue;
+              const val = row[colIdx]?.toString().trim();
+              if (val && val !== articleNo && typeof val === 'string' && val.length > 1) {
+                  articleName = val;
+                  break;
+              }
+          }
+          if (!articleName) {
+              articleName = articleNo || 'Artikel';
+          }
+      }
+
       const size = (idxMap.size > -1 ? row[idxMap.size] : '')?.toString() || '';
       const color = (idxMap.color > -1 ? row[idxMap.color] : '')?.toString() || '';
       

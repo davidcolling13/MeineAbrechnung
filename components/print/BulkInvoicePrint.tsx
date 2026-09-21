@@ -52,24 +52,22 @@ export const BulkInvoicePrint: React.FC<BulkInvoicePrintProps> = ({ invoice }) =
                      <p className="mb-1"><a href="http://www.alpinkader.nrw" className="text-blue-600 underline">www.alpinkader.nrw</a></p>
                      <p className="mb-2">✉ Info@alpinkader.nrw</p>
                      <p className="text-black text-sm font-medium">Rechnungsdatum: {invoice.date}</p>
-                     <p className="text-blue-800 text-xs font-semibold mb-2">Zahlungsziel: {dueDate} (14 Tage)</p>
-                     <p className="text-black font-semibold text-sm">Beleg-Nr.: {invoice.invoiceNumber}</p>
+                     <p className="text-blue-800 text-xs font-semibold">Zahlungsziel: {dueDate} (14 Tage)</p>
                 </div>
              </div>
              <h1 className="text-xl font-bold mb-4">Rechnung {invoice.invoiceNumber}: Sammelbestellung</h1>
              <p className="mb-4 text-sm">Ausrüstungsbestellung für den DAV Alpinkader NRW:</p>
              
-             {/* Changed text-sm to text-xs for smaller table font */}
-             <table className="w-full mb-8 text-xs border-collapse">
+                          <table className="w-full mb-8 text-xs border-collapse">
                 <thead>
-                  <tr className="border border-black">
-                    <th className="border border-black px-2 py-1 text-left font-normal">Artikel-Nr.</th>
-                    <th className="border border-black px-2 py-1 text-left font-normal">Artikelname</th>
-                    <th className="border border-black px-2 py-1 text-left font-normal">Größe</th>
-                    <th className="border border-black px-2 py-1 text-left font-normal">Farbe</th>
-                    <th className="border border-black px-2 py-1 text-right font-normal">Menge</th>
-                    <th className="border border-black px-2 py-1 text-right font-normal"></th>
-                    <th className="border border-black px-2 py-1 text-right font-normal"></th>
+                  <tr className="border border-black bg-slate-50">
+                    <th className="border border-black px-2 py-1.5 text-left font-semibold" style={{ width: '17%' }}>Art-Nr.</th>
+                    <th className="border border-black px-2 py-1.5 text-left font-semibold" style={{ width: '28%' }}>Artikel</th>
+                    <th className="border border-black px-2 py-1.5 text-center font-semibold" style={{ width: '7%' }}>Größe</th>
+                    <th className="border border-black px-2 py-1.5 text-left font-semibold" style={{ width: '18%' }}>Farbe</th>
+                    <th className="border border-black px-2 py-1.5 text-center font-semibold" style={{ width: '6%' }}>Menge</th>
+                    <th className="border border-black px-2 py-1.5 text-right font-semibold" style={{ width: '12%' }}>Einzel</th>
+                    <th className="border border-black px-2 py-1.5 text-right font-semibold" style={{ width: '12%' }}>Gesamt</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -77,30 +75,20 @@ export const BulkInvoicePrint: React.FC<BulkInvoicePrintProps> = ({ invoice }) =
                     <tr key={i} className="border border-black">
                       <td className="border border-black px-2 py-1">{item.articleNo}</td>
                       <td className="border border-black px-2 py-1">{item.name}</td>
-                      <td className="border border-black px-2 py-1">{item.size}</td>
+                      <td className="border border-black px-2 py-1 text-center">{item.size}</td>
                       <td className="border border-black px-2 py-1">{item.color}</td>
-                      <td className="border border-black px-2 py-1 text-right">{item.quantity}</td>
+                      <td className="border border-black px-2 py-1 text-center">{item.quantity}</td>
                       <td className="border border-black px-2 py-1 text-right">{item.singlePrice.toFixed(2)} €</td>
                       <td className="border border-black px-2 py-1 text-right">{item.totalPrice.toFixed(2)} €</td>
                     </tr>
                   ))}
                   <tr className="border border-black">
-                    <td className="border border-black px-2 py-1">Versand / Porto</td>
-                    <td className="border border-black px-2 py-1"></td>
-                    <td className="border border-black px-2 py-1"></td>
-                    <td className="border border-black px-2 py-1"></td>
-                    <td className="border border-black px-2 py-1"></td>
-                    <td className="border border-black px-2 py-1"></td>
-                    <td className="border border-black px-2 py-1 text-right">{invoice.shippingCost.toFixed(2)} €</td>
+                    <td colSpan={6} className="border border-black px-2 py-1 font-medium">Versand / Porto</td>
+                    <td className="border border-black px-2 py-1 text-right font-medium">{invoice.shippingCost.toFixed(2)} €</td>
                   </tr>
-                  <tr className="border border-black font-bold">
-                    <td className="border border-black px-2 py-1"></td>
-                    <td className="border border-black px-2 py-1"></td>
-                    <td className="border border-black px-2 py-1"></td>
-                    <td className="border border-black px-2 py-1"></td>
-                    <td className="border border-black px-2 py-1"></td>
-                    <td className="border border-black px-2 py-1"></td>
-                    <td className="border border-black px-2 py-1 text-right">{invoice.total.toFixed(2)} €</td>
+                  <tr className="border border-black font-bold bg-slate-50">
+                    <td colSpan={6} className="border border-black px-2 py-1.5 font-bold">GESAMTBETRAG</td>
+                    <td className="border border-black px-2 py-1.5 text-right font-bold">{invoice.total.toFixed(2)} €</td>
                   </tr>
                 </tbody>
              </table>

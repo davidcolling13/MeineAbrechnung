@@ -47,7 +47,6 @@ export const BulkInvoiceDocument: React.FC<BulkInvoiceDocumentProps> = ({ invoic
           <Text>Info@alpinkader.nrw</Text>
           <Text style={{ marginTop: 8, color: '#000' }}>Rechnungsdatum: {invoice.date}</Text>
           <Text style={{ marginTop: 2, color: '#1e40af', fontFamily: 'Helvetica-Bold' }}>Zahlungsziel: {dueDateStr}</Text>
-          <Text style={{ marginTop: 4, fontFamily: 'Helvetica-Bold', color: '#000' }}>Beleg-Nr.: {invoice.invoiceNumber}</Text>
         </View>
 
         {/* Title */}
@@ -58,40 +57,74 @@ export const BulkInvoiceDocument: React.FC<BulkInvoiceDocumentProps> = ({ invoic
         <View style={pdfStyles.table}>
           {/* Header */}
           <View style={[pdfStyles.tableRow, pdfStyles.tableHeader]}>
-            <Text style={[pdfStyles.tableCell, { width: '15%' }]}>Art-Nr.</Text>
-            <Text style={[pdfStyles.tableCell, { width: '35%' }]}>Artikel</Text>
-            <Text style={[pdfStyles.tableCell, { width: '10%' }]}>Größe</Text>
-            <Text style={[pdfStyles.tableCell, { width: '10%' }]}>Farbe</Text>
-            <Text style={[pdfStyles.tableCell, { width: '10%', textAlign: 'right' }]}>Menge</Text>
-            <Text style={[pdfStyles.tableCell, { width: '10%', textAlign: 'right' }]}>Einzel</Text>
-            <Text style={[pdfStyles.tableCell, pdfStyles.tableCellLast, { width: '10%', textAlign: 'right' }]}>Gesamt</Text>
+            <View style={[pdfStyles.tableCell, { width: '17%' }]}>
+              <Text style={{ fontFamily: 'Helvetica-Bold' }}>Art-Nr.</Text>
+            </View>
+            <View style={[pdfStyles.tableCell, { width: '28%' }]}>
+              <Text style={{ fontFamily: 'Helvetica-Bold' }}>Artikel</Text>
+            </View>
+            <View style={[pdfStyles.tableCell, { width: '7%' }]}>
+              <Text style={{ fontFamily: 'Helvetica-Bold', textAlign: 'center' }}>Größe</Text>
+            </View>
+            <View style={[pdfStyles.tableCell, { width: '18%' }]}>
+              <Text style={{ fontFamily: 'Helvetica-Bold' }}>Farbe</Text>
+            </View>
+            <View style={[pdfStyles.tableCell, { width: '6%' }]}>
+              <Text style={{ fontFamily: 'Helvetica-Bold', textAlign: 'center' }}>Menge</Text>
+            </View>
+            <View style={[pdfStyles.tableCell, { width: '12%' }]}>
+              <Text style={{ fontFamily: 'Helvetica-Bold', textAlign: 'right' }}>Einzel</Text>
+            </View>
+            <View style={[pdfStyles.tableCell, pdfStyles.tableCellLast, { width: '12%' }]}>
+              <Text style={{ fontFamily: 'Helvetica-Bold', textAlign: 'right' }}>Gesamt</Text>
+            </View>
           </View>
 
           {/* Items */}
           {invoice.items.map((item, i) => (
             <View key={i} style={pdfStyles.tableRow}>
-              <Text style={[pdfStyles.tableCell, { width: '15%' }]}>{item.articleNo}</Text>
-              <Text style={[pdfStyles.tableCell, { width: '35%' }]}>{item.name}</Text>
-              <Text style={[pdfStyles.tableCell, { width: '10%' }]}>{item.size}</Text>
-              <Text style={[pdfStyles.tableCell, { width: '10%' }]}>{item.color}</Text>
-              <Text style={[pdfStyles.tableCell, { width: '10%', textAlign: 'right' }]}>{item.quantity}</Text>
-              <Text style={[pdfStyles.tableCell, { width: '10%', textAlign: 'right' }]}>{item.singlePrice.toFixed(2)}</Text>
-              <Text style={[pdfStyles.tableCell, pdfStyles.tableCellLast, { width: '10%', textAlign: 'right' }]}>{item.totalPrice.toFixed(2)}</Text>
+              <View style={[pdfStyles.tableCell, { width: '17%' }]}>
+                <Text>{item.articleNo}</Text>
+              </View>
+              <View style={[pdfStyles.tableCell, { width: '28%' }]}>
+                <Text>{item.name}</Text>
+              </View>
+              <View style={[pdfStyles.tableCell, { width: '7%' }]}>
+                <Text style={{ textAlign: 'center' }}>{item.size}</Text>
+              </View>
+              <View style={[pdfStyles.tableCell, { width: '18%' }]}>
+                <Text>{item.color}</Text>
+              </View>
+              <View style={[pdfStyles.tableCell, { width: '6%' }]}>
+                <Text style={{ textAlign: 'center' }}>{item.quantity}</Text>
+              </View>
+              <View style={[pdfStyles.tableCell, { width: '12%' }]}>
+                <Text style={{ textAlign: 'right' }}>{item.singlePrice.toFixed(2)} €</Text>
+              </View>
+              <View style={[pdfStyles.tableCell, pdfStyles.tableCellLast, { width: '12%' }]}>
+                <Text style={{ textAlign: 'right' }}>{item.totalPrice.toFixed(2)} €</Text>
+              </View>
             </View>
           ))}
 
           {/* Shipping */}
           <View style={pdfStyles.tableRow}>
-            <Text style={[pdfStyles.tableCell, { width: '80%' }]}>Versand / Porto</Text>
-            <Text style={[pdfStyles.tableCell, { width: '10%' }]}></Text>
-            <Text style={[pdfStyles.tableCell, pdfStyles.tableCellLast, { width: '10%', textAlign: 'right' }]}>{invoice.shippingCost.toFixed(2)}</Text>
+            <View style={[pdfStyles.tableCell, { width: '88%' }]}>
+              <Text>Versand / Porto</Text>
+            </View>
+            <View style={[pdfStyles.tableCell, pdfStyles.tableCellLast, { width: '12%' }]}>
+              <Text style={{ textAlign: 'right' }}>{invoice.shippingCost.toFixed(2)} €</Text>
+            </View>
           </View>
 
           {/* Total */}
           <View style={[pdfStyles.tableRow, { borderBottomWidth: 0 }]}>
-            <Text style={[pdfStyles.tableCell, { width: '80%', fontFamily: 'Helvetica-Bold' }]}>GESAMTBETRAG</Text>
-            <Text style={[pdfStyles.tableCell, { width: '10%' }]}></Text>
-            <Text style={[pdfStyles.tableCell, pdfStyles.tableCellLast, { width: '10%', textAlign: 'right', fontFamily: 'Helvetica-Bold' }]}>{invoice.total.toFixed(2)} €</Text>
+            <View style={[pdfStyles.tableCell, { width: '88%' }]}>
+              <Text style={{ fontFamily: 'Helvetica-Bold' }}>GESAMTBETRAG</Text>
+            </View>
+            <View style={[pdfStyles.tableCell, pdfStyles.tableCellLast, { width: '12%' }]}>
+              <Text style={{ fontFamily: 'Helvetica-Bold', textAlign: 'right' }}>{invoice.total.toFixed(2)} €</Text>
+            </View>
           </View>
         </View>
 
